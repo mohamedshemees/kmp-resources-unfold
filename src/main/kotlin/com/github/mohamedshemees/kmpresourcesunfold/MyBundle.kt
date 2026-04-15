@@ -1,4 +1,4 @@
-package com.github.mohamedshemees.kmpresourcesmanager
+package com.github.mohamedshemees.kmpresourcesunfold
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls

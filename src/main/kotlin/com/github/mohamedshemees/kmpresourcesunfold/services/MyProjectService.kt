@@ -1,9 +1,9 @@
-package com.github.mohamedshemees.kmpresourcesmanager.services
+package com.github.mohamedshemees.kmpresourcesunfold.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.github.mohamedshemees.kmpresourcesmanager.MyBundle
+import com.github.mohamedshemees.kmpresourcesunfold.MyBundle
 
 @Service(Service.Level.PROJECT)
 class MyProjectService(project: Project) {

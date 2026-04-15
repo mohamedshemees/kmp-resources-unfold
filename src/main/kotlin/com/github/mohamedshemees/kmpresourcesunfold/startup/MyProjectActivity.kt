@@ -1,4 +1,4 @@
-package com.github.mohamedshemees.kmpresourcesmanager.startup
+package com.github.mohamedshemees.kmpresourcesunfold.startup
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project

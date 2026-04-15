@@ -1,6 +1,6 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# kmp-resources-manager Changelog
+# Kmp Resources Unfold Changelog
 
 ## [Unreleased]
 ### Added

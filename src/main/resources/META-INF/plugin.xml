@@ -1,15 +1,22 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.mohamedshemees.kmpresourcesmanager</id>
-    <name>kmp-resources-manager</name>
+    <id>com.github.mohamedshemees.kmpresourcesunfold</id>
+    <name>Kmp Resources Unfold</name>
     <vendor>mohamedshemees</vendor>
 
     <depends>com.intellij.modules.platform</depends>
-
+    <depends>org.jetbrains.android</depends>
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.mohamedshemees.kmpresourcesmanager.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.mohamedshemees.kmpresourcesmanager.startup.MyProjectActivity" />
+        <toolWindow
+                factoryClass="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.MyToolWindowFactory"
+                id="Kmp Resources Unfold"
+                anchor="left"
+                icon="/icons/logo.png" />
+        />
+        <fileEditorProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.VectorPreviewProvider"
+                            order="first, before text-editor"/>
+        <postStartupActivity implementation="com.github.mohamedshemees.kmpresourcesunfold.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
