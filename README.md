@@ -73,14 +73,6 @@ If you encounter any bugs or have feature requests, please [Open an Issue](https
 * 📝 **Steps to reproduce** the problem.
 
 ---
-
-## 💻 Tech Stack & Requirements
-<img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" /> <img src="https://img.shields.io/badge/Android%20Studio-3DDC84?style=for-the-badge&logo=android-studio&logoColor=white" /> <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
-
-* **Supported IDEs**: Android Studio Koala (2024.1+) & IntelliJ IDEA.
-* **Target Projects**: Kotlin Multiplatform (KMP), Compose Multiplatform, and Android Native.
-
----
 ## ⚖️ Legal & Credits
 * This plugin is based on the [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template).
 * Icons and rendering logic leverage IntelliJ/Android open-source components.
