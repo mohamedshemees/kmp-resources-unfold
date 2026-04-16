@@ -21,6 +21,6 @@ object KmpResourceScanner {
             }
             true
         }
-        return drawableFiles.distinctBy { it.name }
+        return drawableFiles.distinctBy { it.path }
     }
 }

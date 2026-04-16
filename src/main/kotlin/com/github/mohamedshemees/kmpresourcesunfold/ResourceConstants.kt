@@ -19,12 +19,13 @@ enum class ResourceExtension(val extension: String) {
 }
 
 enum class ResourceType {
-    ALL, VECTORS, IMAGES;
+    ALL, VECTORS, IMAGES, STRINGS;
 
     companion object {
         fun fromFilterName(name: String): ResourceType = when (name) {
             "Vectors" -> VECTORS
             "Images" -> IMAGES
+            "Strings" -> STRINGS
             else -> ALL
         }
     }
@@ -33,8 +34,12 @@ enum class ResourceType {
 object ResourceConstants {
     const val COMPOSE_RESOURCES_DIR = "composeResources"
     const val DRAWABLE_DIR = "drawable"
+    const val VALUES_DIR = "values"
+    const val STRINGS_FILE = "strings.xml"
     const val BUILD_DIR_1 = "/build/"
     const val BUILD_DIR_2 = "\\build\\"
     const val VECTOR_TAG = "<vector"
     const val PAINTER_RESOURCE_TEMPLATE = "painterResource(Res.drawable.%s)"
+    const val STRING_RESOURCE_TEMPLATE = "Res.string.%s"
 }
+

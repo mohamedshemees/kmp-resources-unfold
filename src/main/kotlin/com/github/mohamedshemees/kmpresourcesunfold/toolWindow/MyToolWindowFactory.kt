@@ -18,6 +18,9 @@ import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.datatransfer.StringSelection
@@ -30,12 +33,20 @@ import javax.swing.event.DocumentListener
 class MyToolWindowFactory : ToolWindowFactory {
 
     private var allFiles = listOf<VirtualFile>()
+    private var allStringResources = listOf<StringResource>()
     private var currentTypeFilter = ResourceType.ALL
     private var clickTimer: Timer? = null
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val mainPanel = SimpleToolWindowPanel(true, true)
-        allFiles = KmpResourceScanner.findComposeDrawables(project)
+        lateinit var updateList: () -> Unit
+
+        val refreshData = {
+            allFiles = KmpResourceScanner.findComposeDrawables(project)
+            allStringResources = StringResourceProcessor.findStringResources(project, allFiles)
+        }
+
+        refreshData()
 
         val availableModules = allFiles.mapNotNull { file ->
             ModuleUtilCore.findModuleForFile(file, project)?.name
@@ -47,7 +58,6 @@ class MyToolWindowFactory : ToolWindowFactory {
 
         val chipPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0))
         val chips = mutableListOf<FilterChip>()
-        lateinit var updateList: () -> Unit
 
         val onChipClicked = { clickedChip: FilterChip ->
             chips.forEach { it.setSelectedState(it == clickedChip) }
@@ -58,7 +68,17 @@ class MyToolWindowFactory : ToolWindowFactory {
         chips.add(FilterChip(MyBundle.message("filter.all"), true, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.vectors"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.images"), false, 0, onChipClicked))
+        chips.add(FilterChip(MyBundle.message("filter.strings"), false, 0, onChipClicked))
         chips.forEach { chipPanel.add(it) }
+
+        project.messageBus.connect(toolWindow.disposable).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+            override fun after(events: List<VFileEvent>) {
+                UIUtil.invokeLaterIfNeeded {
+                    refreshData()
+                    updateList()
+                }
+            }
+        })
 
         val modulePanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
         modulePanel.add(JLabel(MyBundle.message("label.module")))
@@ -78,7 +98,7 @@ class MyToolWindowFactory : ToolWindowFactory {
         topPanel.add(filterPanel, BorderLayout.NORTH)
         topPanel.add(searchPanel, BorderLayout.SOUTH)
 
-        val resourceModel = DefaultListModel<VirtualFile>()
+        val resourceModel = DefaultListModel<Any>()
         val resourceList = JBList(resourceModel).apply {
             selectionBackground = background
             isFocusable = false
@@ -88,50 +108,74 @@ class MyToolWindowFactory : ToolWindowFactory {
 
         resourceList.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                val selectedFile = resourceList.selectedValue ?: return
+                val selected = resourceList.selectedValue ?: return
                 if (e.clickCount == 2) {
                     clickTimer?.stop()
-                    FileEditorManager.getInstance(project).openFile(selectedFile, true)
+                    val fileToOpen = when (selected) {
+                        is VirtualFile -> selected
+                        is StringResource -> selected.file
+                        else -> null
+                    }
+                    fileToOpen?.let { FileEditorManager.getInstance(project).openFile(it, true) }
                 } else if (e.clickCount == 1) {
                     clickTimer?.stop()
                     clickTimer = Timer(250) {
-                        val nameWithoutExt = selectedFile.nameWithoutExtension
-                        val composeCode = ResourceConstants.PAINTER_RESOURCE_TEMPLATE.format(nameWithoutExt)
-                        CopyPasteManager.getInstance().setContents(StringSelection(composeCode))
-                        JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
-                            MyBundle.message("message.copied", composeCode),
-                            null,
-                            JBColor.namedColor("ToolTip.background", JBColor.background()),
-                            null
-                        )
-                            .setFadeoutTime(2000).createBalloon().show(RelativePoint(e), Balloon.Position.above)
+                        val code = when (selected) {
+                            is VirtualFile -> selected.nameWithoutExtension
+                            is StringResource -> selected.key
+                            else -> ""
+                        }
+                        if (code.isNotEmpty()) {
+                            CopyPasteManager.getInstance().setContents(StringSelection(code))
+                            JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
+                                MyBundle.message("message.copied", code),
+                                null,
+                                JBColor.namedColor("ToolTip.background", JBColor.background()),
+                                null
+                            )
+                                .setFadeoutTime(2000).createBalloon().show(RelativePoint(e), Balloon.Position.above)
+                        }
                     }.apply { isRepeats = false; start() }
                 }
             }
         })
-
 
         updateList = {
             resourceModel.clear()
             val lowerSearch = searchField.text.lowercase()
             val allModulesStr = MyBundle.message("item.allModules")
             val selectedModule = moduleBox.selectedItem as String
-            allFiles.forEach { file ->
-                val ext = ResourceExtension.fromExtension(file.extension)
-                val fileModule = ModuleUtilCore.findModuleForFile(file, project)?.name
-                val matchesType = when (currentTypeFilter) {
-                    ResourceType.VECTORS -> ResourceExtension.vectorExtensions.contains(ext)
-                    ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
-                    else -> true
+
+            when (currentTypeFilter) {
+                ResourceType.STRINGS -> {
+                    allStringResources.filter { resource ->
+                        val moduleName = ModuleUtilCore.findModuleForFile(resource.file, project)?.name
+                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                        val matchesSearch = resource.key.lowercase().contains(lowerSearch)
+                        matchesModule && matchesSearch
+                    }.forEach { resourceModel.addElement(it) }
                 }
-                if (file.name.lowercase().contains(lowerSearch) && 
-                    (selectedModule == allModulesStr || fileModule == selectedModule) && 
-                    matchesType) {
-                    resourceModel.addElement(file)
+                else -> {
+                    allFiles.forEach { file ->
+                        val ext = ResourceExtension.fromExtension(file.extension)
+                        val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                        val matchesType = when (currentTypeFilter) {
+                            ResourceType.VECTORS -> ResourceExtension.vectorExtensions.contains(ext)
+                            ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
+                            else -> ext != ResourceExtension.XML || !file.path.contains("values")
+                        }
+                        val matchesSearch = file.name.lowercase().contains(lowerSearch)
+                        
+                        if (matchesModule && matchesSearch && matchesType) {
+                            resourceModel.addElement(file)
+                        }
+                    }
                 }
             }
             chips.forEach { it.updateCount(resourceModel.size) }
         }
+
 
         updateList()
         searchField.addDocumentListener(object : DocumentListener {
