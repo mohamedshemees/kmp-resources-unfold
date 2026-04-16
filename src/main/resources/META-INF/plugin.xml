@@ -16,6 +16,5 @@
                 icon="/icons/logo.png" />
         <fileEditorProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.VectorPreviewProvider"
                             order="first, before text-editor"/>
-        <postStartupActivity implementation="com.github.mohamedshemees.kmpresourcesunfold.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
