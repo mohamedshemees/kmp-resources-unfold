@@ -1,3 +1,4 @@
+import org.gradle.kotlin.dsl.dependencies
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
@@ -36,17 +37,10 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        // To develop using a local IDE installation instead of downloading the SDK,
-        // replace the line below with:e.g local("C:/Program Files/Android/Android Studio")
+        //local("C:/Program Files/Android/Android Studio")
         intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
-        // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
-        bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
+        bundledPlugins("org.jetbrains.kotlin", "org.jetbrains.android")
 
-        // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
-        plugins(providers.gradleProperty("platformPlugins").map { it.split(',') })
-
-        // Module Dependencies. Uses `platformBundledModules` property from the gradle.properties file for bundled IntelliJ Platform modules.
-        bundledModules(providers.gradleProperty("platformBundledModules").map { it.split(',') })
 
         testFramework(TestFrameworkType.Platform)
     }
@@ -54,6 +48,7 @@ dependencies {
 
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
+    buildSearchableOptions.set(false)
     pluginConfiguration {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
@@ -105,7 +100,7 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            recommended()
+            local("C:/Program Files/Android/Android Studio")
         }
     }
 }

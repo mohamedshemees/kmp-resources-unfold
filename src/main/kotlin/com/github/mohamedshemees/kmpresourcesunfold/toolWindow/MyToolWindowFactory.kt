@@ -30,7 +30,9 @@ import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
-class MyToolWindowFactory : ToolWindowFactory {
+import com.intellij.openapi.project.DumbAware
+
+class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
     private var allFiles = listOf<VirtualFile>()
     private var allStringResources = listOf<StringResource>()

@@ -17,7 +17,9 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
-import java.awt.*
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import java.awt.GridBagLayout
 import java.beans.PropertyChangeListener
 import javax.swing.*
 
@@ -85,40 +87,40 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
 
         mainPanel.add(toolbar, BorderLayout.NORTH)
         mainPanel.add(scrollPane, BorderLayout.CENTER)
-// 3. AUTO-REFRESH
-val document = FileDocumentManager.getInstance().getDocument(file)
-document?.addDocumentListener(object : DocumentListener {
-    override fun documentChanged(event: DocumentEvent) {
+        val document = FileDocumentManager.getInstance().getDocument(file)
+        document?.addDocumentListener(object : DocumentListener {
+            override fun documentChanged(event: DocumentEvent) {
+                refreshPreview()
+            }
+        }, this)
+
         refreshPreview()
     }
-})
 
-refreshPreview()
-}
+    private fun updateZoom(label: JLabel) {
+        label.text = "${(zoomScale * 100).toInt()}%"
+        refreshPreview()
+    }
 
-private fun updateZoom(label: JLabel) {
-label.text = "${(zoomScale * 100).toInt()}%"
-refreshPreview()
-}
+    private fun refreshPreview() {
+        val document = FileDocumentManager.getInstance().getDocument(file)
+        val xmlContent = document?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
 
-private fun refreshPreview() {
-val document = FileDocumentManager.getInstance().getDocument(file)
-val xmlContent = document?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
+        try {
+            if (xmlContent.contains(ResourceConstants.VECTOR_TAG)) {
+                val renderScale = 10.0 * zoomScale
+                val targetSize = VdPreview.TargetSize.createFromScale(renderScale)
+                val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
 
-try {
-    if (xmlContent.contains(ResourceConstants.VECTOR_TAG)) {
-        val renderScale = 10.0 * zoomScale
-        val targetSize = VdPreview.TargetSize.createFromScale(renderScale)
-        val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
-
-        if (img != null) {
-            imageLabel.icon = ImageIcon(img)
-            imageLabel.revalidate()
-            canvasPanel.revalidate()
+                if (img != null) {
+                    imageLabel.icon = ImageIcon(img)
+                    imageLabel.revalidate()
+                    canvasPanel.revalidate()
+                }
+            }
+        } catch (_: Throwable) {
         }
     }
-} catch (_: Throwable) {}
-}
 
 
     override fun getComponent(): JComponent = mainPanel
