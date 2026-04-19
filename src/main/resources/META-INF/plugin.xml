@@ -20,5 +20,16 @@
 
         <fileEditorProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.VectorPreviewProvider"
                             order="first, before text-editor"/>
+
+        <codeInsight.lineMarkerProvider language="XML"
+                                        implementationClass="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourceLocalizationLineMarkerProvider"/>
+        <psi.referenceContributor language="XML"
+                                  implementation="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourceKeyReferenceContributor"/>
+        <localInspection language="XML"
+                         displayName="Missing resource translation"
+                         groupName="KMP resources"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.MissingTranslationInspection"/>
     </extensions>
 </idea-plugin>
