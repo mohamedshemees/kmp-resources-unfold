@@ -1,7 +1,12 @@
 
 # Kmp Resources Unfold Changelog
 
-## [0.0.1-alpha]
+## [0.0.3-alpha]
+### Fixed
+- **API Stability**: Switched to `ImageLoader.loadFromUrl` to avoid internal API warnings in the Plugin Verifier.
+- **Improved Lifecycle**: Updated `DocumentListener` registration with a `Disposable` parent to prevent memory leaks in the editor.
+
+## [0.0.2-alpha]
 ### Added
 - **Unified Asset Explorer**: A dedicated tool window to browse all project assets (XML Vectors, SVGs, and Images) across all KMP modules.
 - **Native Vector Rendering**: Integrated previewer for Android Vector Drawables (.xml) with zoom controls and real-time refresh.
@@ -11,4 +16,4 @@
 - **Quick Copy**: Single-click to copy resource names or keys directly to the clipboard with visual feedback.
 - **Auto-Refresh**: Seamlessly updates the asset list and previews whenever files change in the workspace.
 - **Internal API Compliance**: Migrated to stable `ImageLoader` and `ImageUtil` APIs for long-term IDE stability.
-- **Broad Compatibility**: Validated for Android Studio versions ranging from Koala (241) to Panda (253).
+- **Broad Compatibility**: Validated for Android Studio versions ranging from Ladybug (242) to Panda (253).

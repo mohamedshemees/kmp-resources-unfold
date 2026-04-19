@@ -7,12 +7,13 @@ import com.github.mohamedshemees.kmpresourcesunfold.ResourceExtension
 import com.github.mohamedshemees.kmpresourcesunfold.StringResource
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
-import com.intellij.util.SVGLoader
+import com.intellij.util.ImageLoader
+import com.intellij.util.ui.ImageUtil
 import java.awt.*
 import javax.imageio.ImageIO
 import javax.swing.*
 
-@Suppress("UnstableApiUsage")
+
 object ResourceIconProvider {
     private val iconCache = mutableMapOf<String, Icon>()
     private const val VECTOR_HARD_SIZE = 64
@@ -30,22 +31,21 @@ object ResourceIconProvider {
                             val img = ImageIO.read(stream)
                             if (img != null) {
                                 val scale = minOf(IMAGE_THUMBNAIL_SIZE / img.width, IMAGE_THUMBNAIL_SIZE / img.height)
-                                val scaled = img.getScaledInstance(
+                                val scaled = ImageUtil.toBufferedImage(img.getScaledInstance(
                                     (img.width * scale).toInt(),
                                     (img.height * scale).toInt(),
                                     Image.SCALE_SMOOTH
-                                )
+                                ))
                                 finalIcon = ImageIcon(scaled)
                             }
                         }
                     }
 
                     ResourceExtension.SVG -> {
-                        file.inputStream.use { stream ->
-                            val url = java.net.URL("file://${file.path}")
-                            val img = SVGLoader.load(url, stream, 5.0f)
+                        val img = ImageLoader.loadFromUrl(java.net.URI.create(file.url).toURL())
+                        if (img != null) {
                             finalIcon = ImageIcon(
-                                img.getScaledInstance(VECTOR_HARD_SIZE, VECTOR_HARD_SIZE, Image.SCALE_SMOOTH)
+                                ImageUtil.toBufferedImage(img.getScaledInstance(VECTOR_HARD_SIZE, VECTOR_HARD_SIZE, Image.SCALE_SMOOTH))
                             )
                         }
                     }
