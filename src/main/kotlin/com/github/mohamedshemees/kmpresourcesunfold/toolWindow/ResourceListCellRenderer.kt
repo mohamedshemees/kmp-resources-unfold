@@ -42,7 +42,7 @@ object ResourceIconProvider {
                     }
 
                     ResourceExtension.SVG -> {
-                        val img = ImageLoader.loadFromUrl(java.net.URI.create(file.url).toURL())
+                        val img = ImageLoader.loadFromStream(file.inputStream)
                         if (img != null) {
                             finalIcon = ImageIcon(
                                 ImageUtil.toBufferedImage(img.getScaledInstance(VECTOR_HARD_SIZE, VECTOR_HARD_SIZE, Image.SCALE_SMOOTH))

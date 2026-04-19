@@ -16,6 +16,8 @@ class VectorPreviewProvider : FileEditorProvider, DumbAware {
 
     override fun accept(project: Project, file: VirtualFile): Boolean {
         val ext = file.extension?.lowercase()
+        if (file.name == ResourceConstants.STRINGS_FILE) return false
+        
         return ext == ResourceExtension.XML.extension && 
                 (file.path.contains(ResourceConstants.DRAWABLE_DIR) || 
                  file.path.contains(ResourceConstants.COMPOSE_RESOURCES_DIR))

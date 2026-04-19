@@ -4,12 +4,16 @@ import com.github.mohamedshemees.kmpresourcesunfold.*
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.module.ModuleUtilCore
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.ui.popup.Balloon
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.JBColor
@@ -18,19 +22,15 @@ import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.openapi.vfs.newvfs.BulkFileListener
-import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.ui.UIUtil
-import java.awt.*
+import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
-
-import com.intellij.openapi.project.DumbAware
 
 class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
@@ -73,14 +73,15 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         chips.add(FilterChip(MyBundle.message("filter.strings"), false, 0, onChipClicked))
         chips.forEach { chipPanel.add(it) }
 
-        project.messageBus.connect(toolWindow.disposable).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
-            override fun after(events: List<VFileEvent>) {
-                UIUtil.invokeLaterIfNeeded {
-                    refreshData()
-                    updateList()
+        project.messageBus.connect(toolWindow.disposable)
+            .subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    UIUtil.invokeLaterIfNeeded {
+                        refreshData()
+                        updateList()
+                    }
                 }
-            }
-        })
+            })
 
         val modulePanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
         modulePanel.add(JLabel(MyBundle.message("label.module")))
@@ -156,7 +157,17 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                         val matchesSearch = resource.key.lowercase().contains(lowerSearch)
                         matchesModule && matchesSearch
                     }.forEach { resourceModel.addElement(it) }
+
+                    allFiles.filter { it.name == ResourceConstants.STRINGS_FILE }.forEach { file ->
+                        val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                        val matchesSearch = file.name.lowercase().contains(lowerSearch)
+                        if (matchesModule && matchesSearch) {
+                            resourceModel.addElement(file)
+                        }
+                    }
                 }
+
                 else -> {
                     allFiles.forEach { file ->
                         val ext = ResourceExtension.fromExtension(file.extension)
@@ -168,7 +179,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                             else -> ext != ResourceExtension.XML || !file.path.contains("values")
                         }
                         val matchesSearch = file.name.lowercase().contains(lowerSearch)
-                        
+
                         if (matchesModule && matchesSearch && matchesType) {
                             resourceModel.addElement(file)
                         }
