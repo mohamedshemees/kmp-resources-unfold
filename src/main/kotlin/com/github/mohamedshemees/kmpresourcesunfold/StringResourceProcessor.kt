@@ -21,27 +21,57 @@ object StringResourceProcessor {
         val resources = mutableListOf<StringResource>()
 
         for (defaultFile in defaultStringsFiles) {
-            val psiFile = PsiManager.getInstance(project).findFile(defaultFile) as? XmlFile ?: continue
-            
-            // Find sibling localization folders (e.g., values-ar)
-            val parentDir = defaultFile.parent.parent ?: continue
-            val localizedFiles = parentDir.children
-                .filter { it.isDirectory && it.name.startsWith("values-") }
-                .mapNotNull { it.findChild(ResourceConstants.STRINGS_FILE) }
-
-            val localizedMaps = localizedFiles.associate { file ->
-                file.parent.name.substringAfter("values-") to parseStrings(project, file).keys
-            }
-
             val defaultStrings = parseStrings(project, defaultFile)
 
             for ((key, value) in defaultStrings) {
-                val missing = localizedMaps.filter { !it.value.contains(key) }.keys.toList()
+                val missing = getMissingTranslations(project, defaultFile, key)
                 resources.add(StringResource(key, value, missing, defaultFile))
             }
         }
 
         return resources
+    }
+
+    fun findRelatedLocalizedFiles(currentFile: VirtualFile): List<VirtualFile> {
+        val parentDir = currentFile.parent ?: return emptyList()
+        val grandParentDir = parentDir.parent ?: return emptyList()
+
+        if (!grandParentDir.name.contains(ResourceConstants.COMPOSE_RESOURCES_DIR)) return emptyList()
+
+        val baseDirName = parentDir.name.substringBefore("-")
+        val fileName = currentFile.name
+
+        return grandParentDir.children
+            .filter { it.isDirectory && (it.name == baseDirName || it.name.startsWith("$baseDirName-")) }
+            .mapNotNull { it.findChild(fileName) }
+            .filter { it.path != currentFile.path }
+    }
+
+    fun getMissingTranslations(project: Project, currentFile: VirtualFile, key: String): List<String> {
+        val relatedFiles = findRelatedLocalizedFiles(currentFile)
+        if (relatedFiles.isEmpty()) return emptyList()
+
+        val psiManager = PsiManager.getInstance(project)
+        val missingIn = mutableListOf<String>()
+
+        for (file in relatedFiles) {
+            val psiFile = psiManager.findFile(file) as? XmlFile ?: continue
+            val rootTag = psiFile.rootTag ?: continue
+
+            val hasKey = rootTag.findSubTags("string").any {
+                it.getAttributeValue("name") == key
+            }
+
+            if (!hasKey) {
+                val locale = if (file.parent.name.contains("-")) {
+                    file.parent.name.substringAfter("-")
+                } else {
+                    file.parent.name
+                }
+                missingIn.add(locale)
+            }
+        }
+        return missingIn
     }
 
     private fun parseStrings(project: Project, file: VirtualFile): Map<String, String> {
