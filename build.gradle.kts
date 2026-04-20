@@ -37,7 +37,9 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
+        //for local ide instances eg.
         //local("C:/Program Files/Android/Android Studio")
+        //local("C:/Program Files/JetBrains/IntelliJ IDEA 2026.1")
         intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
         bundledPlugins("org.jetbrains.kotlin", "org.jetbrains.android")
 
