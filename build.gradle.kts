@@ -37,12 +37,15 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        //for local ide instances eg.
-        //local("C:/Program Files/Android/Android Studio")
-        //local("C:/Program Files/JetBrains/IntelliJ IDEA 2026.1")
-        intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
+        if (System.getenv("CI") == "true") {
+            // On GitHub Actions, download the actual Android Studio metadata
+            androidStudio("2024.2.1.12") // Ladybug
+        } else {
+            // Locally, use your installed Panda version
+            local("C:/Program Files/Android/Android Studio")
+        }
+        
         bundledPlugins("org.jetbrains.kotlin", "org.jetbrains.android")
-
 
         testFramework(TestFrameworkType.Platform)
     }
@@ -102,7 +105,11 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            local("C:/Program Files/Android/Android Studio")
+            if (System.getenv("CI") == "true") {
+                recommended()
+            } else {
+                local("C:/Program Files/Android/Android Studio")
+            }
         }
     }
 }
