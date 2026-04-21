@@ -1,8 +1,14 @@
 # Kmp Resources Unfold
+<!-- Plugin description -->
+**Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **Kotlin Multiplatform** developers. It bridges a major gap in the IDE by providing visual management for assets across all your modules.
 
+* **Native XML Rendering**: Render **Android Vector Drawables (.xml)** directly in the list.
+* **Unified Asset Explorer**: Browse XML vectors, SVGs, and raster images from all modules.
+* **Seamless Integration**: Designed to feel like a native part of the **Android Studio** UI.
+<!-- Plugin description end -->
 > [!IMPORTANT]
-> **Early Access**: This plugin is currently in the pre-release phase . You can download the latest version and install it manually for now.
-
+> **Early Access**: This plugin is currently in the pre-release phase.
+ 
 **Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **Kotlin Multiplatform** developers. It bridges a major gap in the IDE by providing visual management for assets across all your modules.
 
 ---
@@ -10,16 +16,6 @@
 ## 📺 Demo
 > [!TIP]
 > [Watch the Demo Video Here](YOUR_VIDEO_URL_HERE)
-
----
-
-## 🌟 Why Kmp Resources Unfold?
-
-While Android Studio is powerful, it natively lacks a quick way to preview multiple assets—especially **Android Vector XMLs**—outside of the editor. This plugin solves that by providing:
-
-* **Native XML Rendering**: Unlike the standard file explorer, this plugin renders **Android Vector Drawables (.xml)** directly in the list, giving you an instant visual overview of your icons.
-* **Unified Asset Explorer**: Browse XML vectors, SVGs, and raster images (PNG, JPG, WebP) from all modules in one centralized panel.
-* **Seamless Integration**: Designed to feel like a native part of the **Android Studio** UI.
 
 ---
 

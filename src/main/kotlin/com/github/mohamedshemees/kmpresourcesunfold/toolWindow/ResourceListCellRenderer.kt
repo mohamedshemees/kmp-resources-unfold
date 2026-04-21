@@ -1,16 +1,19 @@
 package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 
 import com.android.ide.common.vectordrawable.VdPreview
+import com.github.mohamedshemees.kmpresourcesunfold.MyBundle
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceConstants
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceExtension
+import com.github.mohamedshemees.kmpresourcesunfold.StringResource
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
-import com.intellij.util.SVGLoader
+import com.intellij.util.ImageLoader
+import com.intellij.util.ui.ImageUtil
 import java.awt.*
 import javax.imageio.ImageIO
 import javax.swing.*
 
-@Suppress("UnstableApiUsage")
+
 object ResourceIconProvider {
     private val iconCache = mutableMapOf<String, Icon>()
     private const val VECTOR_HARD_SIZE = 64
@@ -28,22 +31,21 @@ object ResourceIconProvider {
                             val img = ImageIO.read(stream)
                             if (img != null) {
                                 val scale = minOf(IMAGE_THUMBNAIL_SIZE / img.width, IMAGE_THUMBNAIL_SIZE / img.height)
-                                val scaled = img.getScaledInstance(
+                                val scaled = ImageUtil.toBufferedImage(img.getScaledInstance(
                                     (img.width * scale).toInt(),
                                     (img.height * scale).toInt(),
                                     Image.SCALE_SMOOTH
-                                )
+                                ))
                                 finalIcon = ImageIcon(scaled)
                             }
                         }
                     }
 
                     ResourceExtension.SVG -> {
-                        file.inputStream.use { stream ->
-                            val url = java.net.URL("file://${file.path}")
-                            val img = SVGLoader.load(url, stream, 5.0f)
+                        val img = ImageLoader.loadFromStream(file.inputStream)
+                        if (img != null) {
                             finalIcon = ImageIcon(
-                                img.getScaledInstance(VECTOR_HARD_SIZE, VECTOR_HARD_SIZE, Image.SCALE_SMOOTH)
+                                ImageUtil.toBufferedImage(img.getScaledInstance(VECTOR_HARD_SIZE, VECTOR_HARD_SIZE, Image.SCALE_SMOOTH))
                             )
                         }
                     }
@@ -73,33 +75,51 @@ object ResourceIconProvider {
     }
 }
 
-class ResourceListCellRenderer : ListCellRenderer<VirtualFile> {
+class ResourceListCellRenderer : ListCellRenderer<Any> {
     override fun getListCellRendererComponent(
-        list: JList<out VirtualFile>,
-        file: VirtualFile?,
+        list: JList<out Any>,
+        value: Any?,
         index: Int,
         isSelected: Boolean,
         cellHasFocus: Boolean
     ): Component {
-        val label = JLabel(file?.name ?: "")
-        val panel = object : JPanel(BorderLayout()) {
-            override fun getAccessibleContext() = label.accessibleContext
+        val panel = JPanel(BorderLayout())
+        val label = JLabel()
+        val infoLabel = JLabel()
+
+        when (value) {
+            is VirtualFile -> {
+                label.text = value.name
+                label.icon = ResourceIconProvider.getIcon(value)
+            }
+            is StringResource -> {
+                label.text = value.key
+                label.icon = UIManager.getIcon("FileView.fileIcon")
+                
+                if (value.missingLocales.isNotEmpty()) {
+                    infoLabel.text = MyBundle.message("message.missingTranslations", value.missingLocales.joinToString(", "))
+                    infoLabel.foreground = JBColor.RED
+                } else {
+                    infoLabel.text = MyBundle.message("message.fullyTranslated")
+                    infoLabel.foreground = JBColor.GREEN
+                }
+                infoLabel.font = infoLabel.font.deriveFont(10f)
+            }
         }
 
         label.apply {
             iconTextGap = 20
             horizontalAlignment = JLabel.LEFT
             foreground = list.foreground
-            icon = file?.let { ResourceIconProvider.getIcon(it) } ?: UIManager.getIcon("FileView.fileIcon")
         }
 
         panel.apply {
             isOpaque = true
             background = list.background
             add(label, BorderLayout.CENTER)
+            add(infoLabel, BorderLayout.EAST)
 
             val padding = BorderFactory.createEmptyBorder(8, 12, 8, 12)
-
             if (isSelected) {
                 val selectionBorder = BorderFactory.createLineBorder(JBColor.namedColor("List.selectionInactiveBackground", JBColor.BLUE), 1)
                 border = BorderFactory.createCompoundBorder(selectionBorder, padding)
@@ -112,4 +132,5 @@ class ResourceListCellRenderer : ListCellRenderer<VirtualFile> {
         return panel
     }
 }
+
 
