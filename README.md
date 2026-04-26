@@ -7,7 +7,6 @@
 <h1 align="center">Kmp Resources Unfold</h1>
 
 <p align="center">
-  <a href="https://plugins.jetbrains.com/plugin/31310-kmp-resources-unfold"><img src="https://img.shields.io/jetbrains/plugin/v/31310-kmp-resources-unfold.svg?style=for-the-badge&logo=jetbrains" alt="Version"></a>
   <a href="https://plugins.jetbrains.com/plugin/31310-kmp-resources-unfold"><img src="https://img.shields.io/jetbrains/plugin/d/31310-kmp-resources-unfold.svg?style=for-the-badge&logo=jetbrains" alt="Downloads"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License: MIT"></a>
 </p>
