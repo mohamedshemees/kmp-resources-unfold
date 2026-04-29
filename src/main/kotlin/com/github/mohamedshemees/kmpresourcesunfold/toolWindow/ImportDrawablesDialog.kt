@@ -178,6 +178,20 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
         centerPanel.add(nameField)
         centerPanel.add(infoLabel)
+
+        if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+            val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+                isOpaque = false
+                font = JBUI.Fonts.smallFont()
+                addActionListener {
+                    item.convertSvg = isSelected
+                    onUpdate()
+                }
+            }
+            centerPanel.add(Box.createVerticalStrut(4))
+            centerPanel.add(convertCheckbox)
+        }
+
         itemRowPanel.add(centerPanel, BorderLayout.CENTER)
 
         val doNotImportBtn = JButton(
