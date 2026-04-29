@@ -1,6 +1,12 @@
 package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 
 import com.github.mohamedshemees.kmpresourcesunfold.*
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.module.ModuleUtilCore
@@ -44,6 +50,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         lateinit var updateList: () -> Unit
 
         val refreshData = {
+            ResourceIconProvider.clearCache()
             allFiles = KmpResourceScanner.findComposeDrawables(project)
             allStringResources = StringResourceProcessor.findStringResources(project, allFiles)
         }
@@ -53,6 +60,39 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         val availableModules = allFiles.mapNotNull { file ->
             ModuleUtilCore.findModuleForFile(file, project)?.name
         }.distinct().sorted()
+
+        // Create Toolbar
+        val actionGroup = DefaultActionGroup()
+        val addAction = object : AnAction(MyBundle.message("action.import.title"), MyBundle.message("action.import.description"), com.intellij.icons.AllIcons.General.Add) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
+                descriptor.title = MyBundle.message("title.selectImages")
+                descriptor.withExtensionFilter(MyBundle.message("filter.images"), *ResourceExtension.allExtensions.toTypedArray() )
+                
+                val files = FileChooser.chooseFiles(descriptor, project, null)
+                if (files.isNotEmpty()) {
+                    ImportDrawablesDialog(project, files.toList()).show()
+                }
+            }
+        }
+
+        actionGroup.add(addAction)
+
+        val refreshAction = object : AnAction(
+            MyBundle.message("action.refresh.title"),
+            MyBundle.message("action.refresh.description"),
+            com.intellij.icons.AllIcons.Actions.Refresh
+        ) {
+            override fun actionPerformed(e: AnActionEvent) {
+                refreshData()
+                updateList()
+            }
+        }
+        actionGroup.add(refreshAction)
+
+        val toolbar = ActionManager.getInstance().createActionToolbar("KmpResourcesUnfoldToolbar", actionGroup, true)
+        toolbar.targetComponent = mainPanel
+        mainPanel.toolbar = toolbar.component
 
         val topPanel = JPanel(BorderLayout())
         val filterPanel = JPanel(BorderLayout(0, 5))
