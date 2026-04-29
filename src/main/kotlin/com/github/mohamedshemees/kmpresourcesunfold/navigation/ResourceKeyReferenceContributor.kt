@@ -62,7 +62,7 @@ class ResourceKeyReference(element: XmlAttributeValue) :
             }
             
             matchingTag?.let { tag ->
-                val locale = file.parent.name.substringAfter("-", "default")
+                val locale = file.parent.name.substringAfter("-", com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("label.defaultLocale"))
                 results.add(PsiElementResolveResult(LocalizedXmlTag(tag, locale))) 
             }
         }
@@ -80,7 +80,7 @@ class ResourceKeyReference(element: XmlAttributeValue) :
 
     private class LocalizedXmlTag(private val delegate: XmlTag, private val locale: String) : XmlTag by delegate {
 
-        override fun getName(): String = "${delegate.getAttributeValue("name")} [$locale]"
+        override fun getName(): String = com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("navigation.tagWithLocale", delegate.getAttributeValue("name") ?: "", locale)
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true

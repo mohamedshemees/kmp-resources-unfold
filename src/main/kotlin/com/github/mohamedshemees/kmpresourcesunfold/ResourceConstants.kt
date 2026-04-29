@@ -18,16 +18,15 @@ enum class ResourceExtension(val extension: String) {
     }
 }
 
-enum class ResourceType {
-    ALL, VECTORS, IMAGES, STRINGS;
+enum class ResourceType(val bundleKey: String) {
+    ALL("filter.all"),
+    VECTORS("filter.vectors"),
+    IMAGES("filter.images"),
+    STRINGS("filter.strings");
 
     companion object {
-        fun fromFilterName(name: String): ResourceType = when (name) {
-            "Vectors" -> VECTORS
-            "Images" -> IMAGES
-            "Strings" -> STRINGS
-            else -> ALL
-        }
+        fun fromFilterName(name: String): ResourceType =
+            entries.find { MyBundle.message(it.bundleKey) == name } ?: ALL
     }
 }
 

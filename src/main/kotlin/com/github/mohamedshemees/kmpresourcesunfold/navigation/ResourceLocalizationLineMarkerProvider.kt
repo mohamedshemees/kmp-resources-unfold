@@ -23,11 +23,11 @@ class ResourceLocalizationLineMarkerProvider : RelatedItemLineMarkerProvider() {
         if (relatedFiles.isNotEmpty()) {
             val builder = NavigationGutterIconBuilder.create(AllIcons.Actions.Diff)
                 .setTargets(relatedFiles.map { element.manager.findFile(it)!! })
-                .setTooltipText("Navigate to localized versions")
+                .setTooltipText(com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("navigation.tooltip"))
                 .setNamer { psiElement ->
                     val file = (psiElement as PsiFile).virtualFile
-                    val locale = file.parent.name.substringAfter("-", "default")
-                    "Locale: $locale (${file.parent.name})"
+                    val locale = file.parent.name.substringAfter("-", com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("label.defaultLocale"))
+                    com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("navigation.localeName", locale, file.parent.name)
                 }
 
             result.add(builder.createLineMarkerInfo(element.rootTag!!))

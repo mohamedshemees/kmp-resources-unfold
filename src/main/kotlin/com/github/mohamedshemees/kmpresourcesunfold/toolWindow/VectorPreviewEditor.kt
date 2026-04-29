@@ -43,7 +43,7 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
             border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
         }
 
-        val zoomLabel = JBLabel("100%").apply {
+        val zoomLabel = JBLabel(MyBundle.message("label.zoom", "100")).apply {
             font = JBUI.Fonts.smallFont()
             foreground = UIUtil.getLabelDisabledForeground()
         }
@@ -98,7 +98,7 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
     }
 
     private fun updateZoom(label: JLabel) {
-        label.text = "${(zoomScale * 100).toInt()}%"
+        label.text = MyBundle.message("label.zoom", (zoomScale * 100).toInt().toString())
         refreshPreview()
     }
 

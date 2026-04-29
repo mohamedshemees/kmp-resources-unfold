@@ -24,7 +24,7 @@ class MissingTranslationInspection : LocalInspectionTool() {
                 if (missingIn.isNotEmpty()) {
                     holder.registerProblem(
                         nameAttr.nameElement,
-                        "Key '$key' is missing in translations: ${missingIn.joinToString(", ")}"
+                        com.github.mohamedshemees.kmpresourcesunfold.MyBundle.message("inspection.missingTranslation", key, missingIn.joinToString(", "))
                     )
                 }
             }
