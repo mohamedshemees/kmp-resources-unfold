@@ -11,11 +11,13 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License: MIT"></a>
 </p>
 
+<!-- Plugin description -->
 **Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **IntelliJ IDEA** developers. It bridges a major gap in the IDE by providing visual management for assets across all your Kotlin Multiplatform (KMP) modules.
 
 * **Native XML Rendering**: Render **Android Vector Drawables (.xml)** directly in the list.
 * **Unified Asset Explorer**: Browse XML vectors, SVGs, and raster images from all modules.
 * **Seamless Integration**: Designed to feel like a native part of the IDE UI.
+<!-- Plugin description end -->
 ---
 
 ## 📺 Demo
