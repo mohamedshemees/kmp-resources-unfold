@@ -2,6 +2,9 @@ package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 
 import com.github.mohamedshemees.kmpresourcesunfold.*
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
@@ -31,10 +34,22 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
     private val importedItems = initialFiles.map { ImportedDrawableItem(it) }.toMutableList()
     private var currentStep = ImportStep.SELECT_RESOURCES
+    private var applyPrefix = false
     private val mainPanel = JPanel(CardLayout())
     private lateinit var step1Panel: JPanel
     private lateinit var step2Panel: JPanel
     
+    // Step 1 UI components for preservation
+    private val step1ListPanel = JPanel().apply {
+        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        border = JBUI.Borders.empty()
+    }
+    private val step1ScrollPane = JBScrollPane(step1ListPanel).apply {
+        border = JBUI.Borders.empty()
+        verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+        horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+    }
+
     private val moduleBox = ComboBox<String>()
     private val previousAction = object : AbstractAction(MyBundle.message("button.previous")) {
         override fun actionPerformed(e: java.awt.event.ActionEvent?) {
@@ -65,10 +80,24 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         
         val header = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(10, 10, 5, 10)
+            
+            val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { isOpaque = false }
             val countLabel = JBLabel().apply {
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD)
             }
-            add(countLabel, BorderLayout.WEST)
+            leftPanel.add(countLabel)
+            
+            val prefixCheckbox = JCheckBox(MyBundle.message("prompt.applyPrefix"), applyPrefix).apply {
+                isOpaque = false
+                border = JBUI.Borders.emptyLeft(20)
+                addActionListener {
+                    applyPrefix = isSelected
+                    importedItems.forEach { it.applyPrefix(applyPrefix) }
+                    refreshStep1(panel)
+                }
+            }
+            leftPanel.add(prefixCheckbox)
+            add(leftPanel, BorderLayout.WEST)
             
             val importMore = JButton(MyBundle.message("button.importMore")).apply {
                 putClientProperty("JButton.buttonType", "link")
@@ -83,7 +112,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     val files = FileChooser.chooseFiles(descriptor, project, null)
                     files.forEach { file ->
                         if (importedItems.none { it.file == file }) {
-                            importedItems.add(ImportedDrawableItem(file))
+                            importedItems.add(ImportedDrawableItem(file).apply { applyPrefix(applyPrefix) })
                         }
                     }
                     refreshStep1(panel)
@@ -93,42 +122,41 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
         
         panel.add(header, BorderLayout.NORTH)
+        panel.add(step1ScrollPane, BorderLayout.CENTER)
         refreshStep1(panel)
         return panel
     }
 
     private fun refreshStep1(panel: JPanel) {
         val header = panel.getComponent(0) as JPanel
-        val countLabel = header.getComponent(0) as JBLabel
-        val count = importedItems.count { !it.doNotImport }
+        val leftPanel = header.getComponent(0) as JPanel
+        val countLabel = leftPanel.getComponent(0) as JBLabel
+        val count = importedItems.size
         countLabel.text = if (count == 1) MyBundle.message("title.step1") else MyBundle.message("title.step1_plural", count)
 
-        val listPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty()
-        }
+        // Preserve scroll position
+        val scrollPos = step1ScrollPane.verticalScrollBar.value
+
+        step1ListPanel.removeAll()
 
         importedItems.forEach { item ->
             val itemPanel = createItemPanel(item) { refreshStep1(panel) }
             itemPanel.maximumSize = Dimension(Int.MAX_VALUE, itemPanel.preferredSize.height)
-            listPanel.add(itemPanel)
+            step1ListPanel.add(itemPanel)
             val sep = JSeparator()
             sep.maximumSize = Dimension(Int.MAX_VALUE, 1)
-            listPanel.add(sep)
+            step1ListPanel.add(sep)
         }
 
-        listPanel.add(Box.createVerticalGlue())
-
-        val scrollPane = JBScrollPane(listPanel).apply {
-            border = JBUI.Borders.empty()
-            verticalScrollBarPolicy = JBScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
-            horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        step1ListPanel.add(Box.createVerticalGlue())
+        
+        step1ListPanel.revalidate()
+        step1ListPanel.repaint()
+        
+        // Restore scroll position after layout
+        SwingUtilities.invokeLater {
+            step1ScrollPane.verticalScrollBar.value = scrollPos
         }
-
-        if (panel.componentCount > 1) panel.remove(1)
-        panel.add(scrollPane, BorderLayout.CENTER)
-        panel.revalidate()
-        panel.repaint()
     }
 
     private fun createItemPanel(item: ImportedDrawableItem, onUpdate: () -> Unit): JPanel {
@@ -136,7 +164,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
         val itemRowPanel = JPanel(BorderLayout(12, 0)).apply {
             border = JBUI.Borders.empty(10, 12)
-            if (item.doNotImport) background = UIUtil.getPanelBackground().darker()
         }
 
         val previewLabel = JBLabel().apply {
@@ -153,19 +180,42 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val centerPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
-            border = JBUI.Borders.emptyTop(4)
         }
 
-        val nameField = JTextField(item.name).apply {
-            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
-            font = JBUI.Fonts.label().deriveFont(Font.PLAIN, 13f)
+        // Top Row: Name field + Remove button
+        val topRow = JPanel(BorderLayout(8, 0)).apply {
+            isOpaque = false
             alignmentX = Component.LEFT_ALIGNMENT
         }
+        
+        val nameField = JTextField(item.name).apply {
+            font = JBUI.Fonts.label().deriveFont(Font.PLAIN, 13f)
+        }
         nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
-            override fun insertUpdate(e: javax.swing.event.DocumentEvent)  { item.name = nameField.text }
-            override fun removeUpdate(e: javax.swing.event.DocumentEvent)  { item.name = nameField.text }
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent) { item.name = nameField.text }
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) item.name = nameField.text }
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) item.name = nameField.text }
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent) { if (nameField.hasFocus()) item.name = nameField.text }
         })
+        topRow.add(nameField, BorderLayout.CENTER)
+
+        val removeAction = object : AnAction(AllIcons.Actions.Close) {
+            override fun actionPerformed(e: AnActionEvent) {
+                importedItems.remove(item)
+                onUpdate()
+            }
+        }
+        val removeBtn = ActionButton(removeAction, removeAction.templatePresentation, "KmpResourcesUnfold", Dimension(22, 22))
+        topRow.add(removeBtn, BorderLayout.EAST)
+        
+        centerPanel.add(topRow)
+
+        // Bottom Row: Info label + Convert SVG checkbox (or placeholder)
+        val infoAndSettingsPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            isOpaque = false
+            border = JBUI.Borders.emptyTop(2)
+            alignmentX = Component.LEFT_ALIGNMENT
+        }
 
         val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
         val size = ResourceUtils.formatSize(item.file.length)
@@ -173,42 +223,36 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             foreground   = UIUtil.getLabelDisabledForeground()
             font         = JBUI.Fonts.smallFont()
             alignmentX   = Component.LEFT_ALIGNMENT
-            border       = JBUI.Borders.emptyTop(4)
         }
+        infoAndSettingsPanel.add(infoLabel)
 
-        centerPanel.add(nameField)
-        centerPanel.add(infoLabel)
-
-        if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
-            val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
-                isOpaque = false
-                font = JBUI.Fonts.smallFont()
-                addActionListener {
-                    item.convertSvg = isSelected
-                    onUpdate()
-                }
-            }
-            centerPanel.add(Box.createVerticalStrut(4))
-            centerPanel.add(convertCheckbox)
-        }
-
-        itemRowPanel.add(centerPanel, BorderLayout.CENTER)
-
-        val doNotImportBtn = JButton(
-            if (item.doNotImport) MyBundle.message("button.import_single")
-            else MyBundle.message("button.doNotImport")
-        ).apply {
-            putClientProperty("JButton.buttonType", "link")
+        val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+            isOpaque = false
+            font = JBUI.Fonts.smallFont()
+            alignmentX = Component.LEFT_ALIGNMENT
             addActionListener {
-                item.doNotImport = !item.doNotImport
+                item.convertSvg = isSelected
                 onUpdate()
             }
         }
-        val eastPanel = JPanel(BorderLayout()).apply {
-            isOpaque = false
-            add(doNotImportBtn, BorderLayout.NORTH)
+
+        if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+            infoAndSettingsPanel.add(convertCheckbox)
+        } else {
+            // Add a placeholder to keep row height consistent
+            infoAndSettingsPanel.add(Box.createVerticalStrut(convertCheckbox.preferredSize.height))
         }
-        itemRowPanel.add(eastPanel, BorderLayout.EAST)
+        
+        centerPanel.add(infoAndSettingsPanel)
+        
+        // Wrapper to vertically center the main content without horizontal centering
+        val centerWrapper = JPanel(GridBagLayout())
+        centerWrapper.isOpaque = false
+        val gbc = GridBagConstraints()
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        gbc.weightx = 1.0
+        centerWrapper.add(centerPanel, gbc)
+        itemRowPanel.add(centerWrapper, BorderLayout.CENTER)
 
         return itemRowPanel
     }
