@@ -149,6 +149,22 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
         resourceList.cellRenderer = ResourceListCellRenderer()
 
+        resourceList.transferHandler = object : TransferHandler() {
+            override fun canImport(support: TransferSupport): Boolean {
+                return support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor)
+            }
+
+            override fun importData(support: TransferSupport): Boolean {
+                if (!canImport(support)) return false
+                val files = support.transferable.getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor) as List<java.io.File>
+                val virtualFiles = files.mapNotNull { VirtualFileManager.getInstance().findFileByNioPath(it.toPath()) }
+                if (virtualFiles.isNotEmpty()) {
+                    ImportDrawablesDialog(project, virtualFiles).show()
+                }
+                return true
+            }
+        }
+
         resourceList.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 val selected = resourceList.selectedValue ?: return

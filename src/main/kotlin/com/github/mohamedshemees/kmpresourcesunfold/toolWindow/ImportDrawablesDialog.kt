@@ -15,6 +15,7 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -123,6 +124,32 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         
         panel.add(header, BorderLayout.NORTH)
         panel.add(step1ScrollPane, BorderLayout.CENTER)
+
+        step1ScrollPane.transferHandler = object : TransferHandler() {
+            override fun canImport(support: TransferSupport): Boolean {
+                return support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor)
+            }
+
+            override fun importData(support: TransferSupport): Boolean {
+                if (!canImport(support)) return false
+                val files = support.transferable.getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor) as List<java.io.File>
+                val virtualFiles = files.mapNotNull { VirtualFileManager.getInstance().findFileByNioPath(it.toPath()) }
+                
+                var added = false
+                virtualFiles.forEach { file ->
+                    if (importedItems.none { it.file == file }) {
+                        importedItems.add(ImportedDrawableItem(file).apply { applyPrefix(applyPrefix) })
+                        added = true
+                    }
+                }
+                
+                if (added) {
+                    refreshStep1(panel)
+                }
+                return true
+            }
+        }
+
         refreshStep1(panel)
         return panel
     }
