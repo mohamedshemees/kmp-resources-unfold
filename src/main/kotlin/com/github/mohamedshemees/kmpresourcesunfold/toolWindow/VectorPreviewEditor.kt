@@ -3,6 +3,7 @@ package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 import com.android.ide.common.vectordrawable.VdPreview
 import com.github.mohamedshemees.kmpresourcesunfold.MyBundle
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceConstants
+import com.github.mohamedshemees.kmpresourcesunfold.ResourceIconProvider
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -113,7 +114,8 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
                 val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
 
                 if (img != null) {
-                    imageLabel.icon = ImageIcon(img)
+                    val imageIcon = ImageIcon(img)
+                    imageLabel.icon = ResourceIconProvider.CheckerboardIcon(imageIcon, imageIcon.iconWidth, imageIcon.iconHeight)
                     imageLabel.revalidate()
                     canvasPanel.revalidate()
                 }
