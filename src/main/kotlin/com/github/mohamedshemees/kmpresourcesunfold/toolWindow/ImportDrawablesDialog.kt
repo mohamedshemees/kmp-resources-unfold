@@ -170,7 +170,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val groupedItems = importedItems.groupBy { it.name }
 
         groupedItems.forEach { (name, items) ->
-            val sortedItems = items.sortedBy { it.density.ordinal }
+            val sortedItems = items.sortedWith(compareBy({ it.detectedDensity.ordinal }, { it.file.name }))
             val itemPanel = createGroupPanel(name, sortedItems, isSummary = false) { refreshStep1(panel) }
             itemPanel.maximumSize = Dimension(Int.MAX_VALUE, itemPanel.preferredSize.height)
             step1ListPanel.add(itemPanel)
@@ -241,14 +241,19 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
 
         items.forEach { item ->
-            itemsPanel.add(createItemRow(item, isSummary, onUpdate))
+            itemsPanel.add(createItemRow(item, items, isSummary, onUpdate))
         }
         groupPanel.add(itemsPanel, BorderLayout.CENTER)
 
         return groupPanel
     }
 
-    private fun createItemRow(item: ImportedDrawableItem, isSummary: Boolean, onUpdate: () -> Unit): JPanel {
+    private fun createItemRow(
+        item: ImportedDrawableItem, 
+        groupItems: List<ImportedDrawableItem>,
+        isSummary: Boolean, 
+        onUpdate: () -> Unit
+    ): JPanel {
         val PREVIEW_SIZE = 48
 
         val itemRowPanel = JPanel(BorderLayout(12, 0)).apply {
@@ -272,12 +277,12 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             isOpaque = false
         }
 
-        val densityLabel = JBLabel(item.density.displayName).apply {
-            font = JBUI.Fonts.label().deriveFont(Font.BOLD)
-        }
-        infoPanel.add(densityLabel)
-
         if (isSummary) {
+            val densityLabel = JBLabel(item.density.displayName).apply {
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
+            }
+            infoPanel.add(densityLabel)
+
             val module = moduleBox.selectedItem as? String ?: ""
             val m = ModuleManager.getInstance(project).modules.find { it.name == module }
             val resDirName = ResourceUtils.getComposeResourcesDir(m ?: return JPanel(), project)?.name ?: "composeResources"
@@ -290,6 +295,29 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(pathLabel)
         } else {
+            val densityBox = ComboBox(Density.ALL_DENSITIES.toTypedArray()).apply {
+                selectedItem = if (item.density == Density.DEFAULT) Density.MDPI else item.density
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD, 12f)
+                
+                var isInternalChange = false
+                addActionListener {
+                    if (isInternalChange) return@addActionListener
+                    val newDensity = selectedItem as Density
+                    val oldDensity = item.density
+                    
+                    if (newDensity != oldDensity) {
+                        // Conflict resolution: Swap densities if another item in group already has the new density
+                        val conflictItem = groupItems.find { it != item && it.density == newDensity }
+                        if (conflictItem != null) {
+                            conflictItem.density = oldDensity
+                        }
+                        item.density = newDensity
+                        onUpdate()
+                    }
+                }
+            }
+            infoPanel.add(densityBox)
+
             val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
             val size = ResourceUtils.formatSize(item.file.length)
             val infoLabel = JBLabel(MyBundle.message("label.itemInfo", item.file.name, size, ext)).apply {

@@ -14,6 +14,8 @@ enum class Density(val directoryQualifier: String, val displayName: String) {
     companion object {
         private val DENSITY_REGEX = Regex("(@[xX]?(\\d+(?:\\.\\d+)?)[xX]?)$")
 
+        val ALL_DENSITIES = listOf(MDPI, HDPI, XHDPI, XXHDPI, XXXHDPI)
+
         fun fromFileName(name: String): Pair<Density, String> {
             val match = DENSITY_REGEX.find(name) ?: return DEFAULT to name
             val suffix = match.groupValues[1]
@@ -32,6 +34,8 @@ enum class Density(val directoryQualifier: String, val displayName: String) {
             return density to baseName
         }
     }
+
+    override fun toString(): String = displayName
 }
 
 data class ImportedDrawableItem(
@@ -41,7 +45,8 @@ data class ImportedDrawableItem(
     var convertSvg: Boolean = file.extension?.lowercase() == ResourceExtension.SVG.extension
 ) {
     private val densityData = Density.fromFileName(originalName)
-    val density = densityData.first
+    val detectedDensity: Density = densityData.first
+    var density: Density = detectedDensity
     val baseName = densityData.second
 
     var name: String = baseName
