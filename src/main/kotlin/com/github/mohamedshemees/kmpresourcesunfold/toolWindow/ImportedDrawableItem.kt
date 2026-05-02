@@ -3,13 +3,50 @@ package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceExtension
 import com.intellij.openapi.vfs.VirtualFile
 
+enum class Density(val directoryQualifier: String, val displayName: String) {
+    MDPI("", "mdpi"),
+    HDPI("-hdpi", "hdpi"),
+    XHDPI("-xhdpi", "xhdpi"),
+    XXHDPI("-xxhdpi", "xxhdpi"),
+    XXXHDPI("-xxxhdpi", "xxxhdpi"),
+    DEFAULT("", "mdpi");
+
+    companion object {
+        private val DENSITY_REGEX = Regex("(@[xX]?(\\d+(?:\\.\\d+)?)[xX]?)$")
+
+        fun fromFileName(name: String): Pair<Density, String> {
+            val match = DENSITY_REGEX.find(name) ?: return DEFAULT to name
+            val suffix = match.groupValues[1]
+            val scale = match.groupValues[2].toDoubleOrNull() ?: return DEFAULT to name
+            
+            val density = when {
+                scale <= 1.05 -> MDPI
+                scale <= 1.6 -> HDPI
+                scale <= 2.1 -> XHDPI
+                scale <= 3.1 -> XXHDPI
+                scale >= 3.9 -> XXXHDPI
+                else -> DEFAULT
+            }
+            
+            val baseName = name.substring(0, match.range.first)
+            return density to baseName
+        }
+    }
+}
+
 data class ImportedDrawableItem(
     val file: VirtualFile,
     private val originalName: String = file.nameWithoutExtension,
-    var name: String = originalName,
     var doNotImport: Boolean = false,
     var convertSvg: Boolean = file.extension?.lowercase() == ResourceExtension.SVG.extension
 ) {
+    private val densityData = Density.fromFileName(originalName)
+    val density = densityData.first
+    val baseName = densityData.second
+
+    var name: String = baseName
+    val suffix: String = if (originalName.length > baseName.length) originalName.substring(baseName.length) else ""
+
     val extension: String
         get() = if (convertSvg) "xml" else file.extension ?: ""
 
@@ -19,9 +56,9 @@ data class ImportedDrawableItem(
             else -> "img_"
         }
         name = if (enabled) {
-            if (originalName.startsWith(prefix)) originalName else "${prefix}$originalName"
+            if (baseName.startsWith(prefix)) baseName else "${prefix}$baseName"
         } else {
-            originalName
+            baseName
         }
     }
 }

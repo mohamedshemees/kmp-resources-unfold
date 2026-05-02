@@ -166,8 +166,12 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
         step1ListPanel.removeAll()
 
-        importedItems.forEach { item ->
-            val itemPanel = createItemPanel(item) { refreshStep1(panel) }
+        // Group by name (base name)
+        val groupedItems = importedItems.groupBy { it.name }
+
+        groupedItems.forEach { (name, items) ->
+            val sortedItems = items.sortedBy { it.density.ordinal }
+            val itemPanel = createGroupPanel(name, sortedItems, isSummary = false) { refreshStep1(panel) }
             itemPanel.maximumSize = Dimension(Int.MAX_VALUE, itemPanel.preferredSize.height)
             step1ListPanel.add(itemPanel)
             val sep = JSeparator()
@@ -186,11 +190,70 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
     }
 
-    private fun createItemPanel(item: ImportedDrawableItem, onUpdate: () -> Unit): JPanel {
-        val PREVIEW_SIZE = 72
+    private fun createGroupPanel(
+        name: String, 
+        items: List<ImportedDrawableItem>, 
+        isSummary: Boolean,
+        onUpdate: () -> Unit
+    ): JPanel {
+        val groupPanel = JPanel(BorderLayout()).apply {
+            isOpaque = false
+        }
+
+        // Header for the group
+        val headerPanel = JPanel(BorderLayout(12, 0)).apply {
+            border = JBUI.Borders.empty(10, 12, 5, 12)
+            isOpaque = false
+        }
+
+        if (isSummary) {
+            headerPanel.add(JBLabel(name).apply { 
+                font = font.deriveFont(Font.BOLD, 14f)
+            }, BorderLayout.CENTER)
+        } else {
+            val nameField = JTextField(name).apply {
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD, 13f)
+            }
+            nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
+                override fun insertUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
+                override fun removeUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
+                override fun changedUpdate(e: javax.swing.event.DocumentEvent) { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
+            })
+            headerPanel.add(nameField, BorderLayout.CENTER)
+
+            val removeAction = object : AnAction(AllIcons.Actions.Close) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    importedItems.removeAll(items)
+                    onUpdate()
+                }
+            }
+            val removeBtn = ActionButton(removeAction, removeAction.templatePresentation, "KmpResourcesUnfold", Dimension(22, 22))
+            headerPanel.add(removeBtn, BorderLayout.EAST)
+        }
+        
+        groupPanel.add(headerPanel, BorderLayout.NORTH)
+
+        // Sub-items (densities)
+        val itemsPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            isOpaque = false
+            border = JBUI.Borders.emptyLeft(20)
+        }
+
+        items.forEach { item ->
+            itemsPanel.add(createItemRow(item, isSummary, onUpdate))
+        }
+        groupPanel.add(itemsPanel, BorderLayout.CENTER)
+
+        return groupPanel
+    }
+
+    private fun createItemRow(item: ImportedDrawableItem, isSummary: Boolean, onUpdate: () -> Unit): JPanel {
+        val PREVIEW_SIZE = 48
 
         val itemRowPanel = JPanel(BorderLayout(12, 0)).apply {
-            border = JBUI.Borders.empty(10, 12)
+            border = JBUI.Borders.empty(5, 12)
+            isOpaque = false
         }
 
         val previewLabel = JBLabel().apply {
@@ -204,82 +267,65 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
         itemRowPanel.add(previewLabel, BorderLayout.WEST)
 
-        val centerPanel = JPanel().apply {
+        val infoPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
         }
 
-        // Top Row: Name field + Remove button
-        val topRow = JPanel(BorderLayout(8, 0)).apply {
-            isOpaque = false
-            alignmentX = Component.LEFT_ALIGNMENT
+        val densityLabel = JBLabel(item.density.displayName).apply {
+            font = JBUI.Fonts.label().deriveFont(Font.BOLD)
         }
-        
-        val nameField = JTextField(item.name).apply {
-            font = JBUI.Fonts.label().deriveFont(Font.PLAIN, 13f)
-        }
-        nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
-            override fun insertUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) item.name = nameField.text }
-            override fun removeUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) item.name = nameField.text }
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent) { if (nameField.hasFocus()) item.name = nameField.text }
-        })
-        topRow.add(nameField, BorderLayout.CENTER)
+        infoPanel.add(densityLabel)
 
-        val removeAction = object : AnAction(AllIcons.Actions.Close) {
-            override fun actionPerformed(e: AnActionEvent) {
-                importedItems.remove(item)
-                onUpdate()
+        if (isSummary) {
+            val module = moduleBox.selectedItem as? String ?: ""
+            val m = ModuleManager.getInstance(project).modules.find { it.name == module }
+            val resDirName = ResourceUtils.getComposeResourcesDir(m ?: return JPanel(), project)?.name ?: "composeResources"
+            val densityDir = "drawable${item.density.directoryQualifier}"
+            val targetPath = "$resDirName/$densityDir/${item.name}.${item.extension}"
+            
+            val pathLabel = JBLabel(targetPath).apply {
+                font = JBUI.Fonts.smallFont()
+                foreground = UIUtil.getLabelDisabledForeground()
             }
-        }
-        val removeBtn = ActionButton(removeAction, removeAction.templatePresentation, "KmpResourcesUnfold", Dimension(22, 22))
-        topRow.add(removeBtn, BorderLayout.EAST)
-        
-        centerPanel.add(topRow)
-
-        // Bottom Row: Info label + Convert SVG checkbox (or placeholder)
-        val infoAndSettingsPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            isOpaque = false
-            border = JBUI.Borders.emptyTop(2)
-            alignmentX = Component.LEFT_ALIGNMENT
-        }
-
-        val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
-        val size = ResourceUtils.formatSize(item.file.length)
-        val infoLabel = JBLabel(MyBundle.message("label.itemInfo", item.file.name, size, ext)).apply {
-            foreground   = UIUtil.getLabelDisabledForeground()
-            font         = JBUI.Fonts.smallFont()
-            alignmentX   = Component.LEFT_ALIGNMENT
-        }
-        infoAndSettingsPanel.add(infoLabel)
-
-        val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
-            isOpaque = false
-            font = JBUI.Fonts.smallFont()
-            alignmentX = Component.LEFT_ALIGNMENT
-            addActionListener {
-                item.convertSvg = isSelected
-                onUpdate()
-            }
-        }
-
-        if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
-            infoAndSettingsPanel.add(convertCheckbox)
+            infoPanel.add(pathLabel)
         } else {
-            // Add a placeholder to keep row height consistent
-            infoAndSettingsPanel.add(Box.createVerticalStrut(convertCheckbox.preferredSize.height))
+            val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
+            val size = ResourceUtils.formatSize(item.file.length)
+            val infoLabel = JBLabel(MyBundle.message("label.itemInfo", item.file.name, size, ext)).apply {
+                foreground   = UIUtil.getLabelDisabledForeground()
+                font         = JBUI.Fonts.smallFont()
+            }
+            infoPanel.add(infoLabel)
+
+            if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+                val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+                    isOpaque = false
+                    font = JBUI.Fonts.smallFont()
+                    addActionListener {
+                        item.convertSvg = isSelected
+                        onUpdate()
+                    }
+                }
+                infoPanel.add(convertCheckbox)
+            }
         }
-        
-        centerPanel.add(infoAndSettingsPanel)
-        
-        // Wrapper to vertically center the main content without horizontal centering
-        val centerWrapper = JPanel(GridBagLayout())
-        centerWrapper.isOpaque = false
-        val gbc = GridBagConstraints()
-        gbc.fill = GridBagConstraints.HORIZONTAL
-        gbc.weightx = 1.0
-        centerWrapper.add(centerPanel, gbc)
-        itemRowPanel.add(centerWrapper, BorderLayout.CENTER)
+
+        itemRowPanel.add(infoPanel, BorderLayout.CENTER)
+
+        if (!isSummary) {
+            val individualRemoveAction = object : AnAction(AllIcons.Actions.Close) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    importedItems.remove(item)
+                    onUpdate()
+                }
+            }
+            val individualRemoveBtn = ActionButton(individualRemoveAction, individualRemoveAction.templatePresentation, "KmpResourcesUnfold", Dimension(18, 18))
+            itemRowPanel.add(individualRemoveBtn, BorderLayout.EAST)
+        }
+
+        // Force fixed height to match Step 1 and prevent stretching
+        itemRowPanel.maximumSize = Dimension(Int.MAX_VALUE, itemRowPanel.preferredSize.height)
 
         return itemRowPanel
     }
@@ -340,12 +386,19 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val summaryPanel = scrollPane.viewport.view as JPanel
         summaryPanel.removeAll()
         
-        importedItems.filter { !it.doNotImport }.forEach { item ->
-            val label = JBLabel("${item.name}.${item.extension}", ResourceIconProvider.getIcon(item.file, 48), SwingConstants.LEFT).apply {
-                border = JBUI.Borders.empty(5, 10)
-            }
-            summaryPanel.add(label)
+        val groupedItems = importedItems.filter { !it.doNotImport }.groupBy { it.name }
+
+        groupedItems.forEach { (name, items) ->
+            val sortedItems = items.sortedBy { it.density.ordinal }
+            val groupPanel = createGroupPanel(name, sortedItems, isSummary = true) {}
+            groupPanel.maximumSize = Dimension(Int.MAX_VALUE, groupPanel.preferredSize.height)
+            summaryPanel.add(groupPanel)
+            val sep = JSeparator()
+            sep.maximumSize = Dimension(Int.MAX_VALUE, 1)
+            summaryPanel.add(sep)
         }
+        
+        summaryPanel.add(Box.createVerticalGlue())
         summaryPanel.revalidate()
     }
 
@@ -363,11 +416,14 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val selectedModuleName = moduleBox.selectedItem as? String ?: return
         val module = ModuleManager.getInstance(project).modules.find { it.name == selectedModuleName } ?: return
         
-        val targetDir = ResourceUtils.getTargetResourceDir(module, project) ?: return
+        val resDir = ResourceUtils.getComposeResourcesDir(module, project) ?: return
 
         WriteCommandAction.runWriteCommandAction(project) {
             try {
                 importedItems.filter { !it.doNotImport }.forEach { item ->
+                    val densityDirName = "drawable${item.density.directoryQualifier}"
+                    val targetDir = VfsUtil.createDirectoryIfMissing(resDir, densityDirName) ?: return@forEach
+
                     if (item.convertSvg) {
                         val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
                         val newFileName = "${item.name}.xml"
@@ -385,7 +441,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                         }
                     }
                 }
-                VfsUtil.markDirtyAndRefresh(true, true, true, targetDir)
+                VfsUtil.markDirtyAndRefresh(true, true, true, resDir)
             } catch (e: Exception) {
                 UIUtil.invokeLaterIfNeeded {
                     Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))

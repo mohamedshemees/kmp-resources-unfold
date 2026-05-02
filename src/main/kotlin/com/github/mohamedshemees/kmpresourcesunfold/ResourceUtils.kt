@@ -21,15 +21,20 @@ object ResourceUtils {
     }
 
     fun getTargetResourceDir(module: Module, project: Project): VirtualFile? {
+        val resDir = getComposeResourcesDir(module, project) ?: return null
+        return com.intellij.openapi.vfs.VfsUtil.createDirectoryIfMissing(resDir, "drawable")
+    }
+
+    fun getComposeResourcesDir(module: Module, project: Project): VirtualFile? {
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         val moduleRoot = contentRoots.find { it.path.contains("src/commonMain") }
             ?: contentRoots.filter { !it.path.contains("/build/") && !it.path.contains("\\build\\") }.firstOrNull()
             ?: project.guessProjectDir() ?: return null
 
         val targetPath = if (moduleRoot.path.contains("src/commonMain")) {
-            "composeResources/drawable"
+            "composeResources"
         } else {
-            "src/commonMain/composeResources/drawable"
+            "src/commonMain/composeResources"
         }
         
         return com.intellij.openapi.vfs.VfsUtil.createDirectoryIfMissing(moduleRoot, targetPath)
