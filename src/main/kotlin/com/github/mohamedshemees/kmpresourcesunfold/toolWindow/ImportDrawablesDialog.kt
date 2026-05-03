@@ -214,10 +214,15 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             val nameField = JTextField(name).apply {
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD, 13f)
             }
-            nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
-                override fun insertUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
-                override fun removeUpdate(e: javax.swing.event.DocumentEvent)  { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
-                override fun changedUpdate(e: javax.swing.event.DocumentEvent) { if (nameField.hasFocus()) items.forEach { it.name = nameField.text } }
+            nameField.addFocusListener(object : java.awt.event.FocusAdapter() {
+                override fun focusLost(e: java.awt.event.FocusEvent?) {
+                    val text = nameField.text
+                    items.forEach { 
+                        val currentPrefix = if (it.name.startsWith("ic_") || it.name.startsWith("img_")) it.name.substringBefore("_") + "_" else ""
+                        it.name = if (applyPrefix && !text.startsWith(currentPrefix)) "$currentPrefix$text" else text
+                    }
+                    onUpdate()
+                }
             })
             headerPanel.add(nameField, BorderLayout.CENTER)
 
@@ -241,7 +246,8 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
 
         items.forEach { item ->
-            itemsPanel.add(createItemRow(item, items, isSummary, onUpdate))
+            val row = createItemRow(item, items, isSummary, onUpdate)
+            itemsPanel.add(row)
         }
         groupPanel.add(itemsPanel, BorderLayout.CENTER)
 
@@ -275,14 +281,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val infoPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
+            alignmentX = Component.LEFT_ALIGNMENT
         }
 
         if (isSummary) {
-            val densityLabel = JBLabel(item.density.displayName).apply {
-                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
-            }
-            infoPanel.add(densityLabel)
-
             val module = moduleBox.selectedItem as? String ?: ""
             val m = ModuleManager.getInstance(project).modules.find { it.name == module }
             val resDirName = ResourceUtils.getComposeResourcesDir(m ?: return JPanel(), project)?.name ?: "composeResources"
@@ -292,12 +294,14 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             val pathLabel = JBLabel(targetPath).apply {
                 font = JBUI.Fonts.smallFont()
                 foreground = UIUtil.getLabelDisabledForeground()
+                alignmentX = Component.LEFT_ALIGNMENT
             }
             infoPanel.add(pathLabel)
         } else {
             val densityBox = ComboBox(Density.ALL_DENSITIES.toTypedArray()).apply {
                 selectedItem = if (item.density == Density.DEFAULT) Density.MDPI else item.density
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD, 12f)
+                alignmentX = Component.LEFT_ALIGNMENT
                 
                 var isInternalChange = false
                 addActionListener {
@@ -306,7 +310,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     val oldDensity = item.density
                     
                     if (newDensity != oldDensity) {
-                        // Conflict resolution: Swap densities if another item in group already has the new density
                         val conflictItem = groupItems.find { it != item && it.density == newDensity }
                         if (conflictItem != null) {
                             conflictItem.density = oldDensity
@@ -320,9 +323,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
             val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
             val size = ResourceUtils.formatSize(item.file.length)
-            val infoLabel = JBLabel(MyBundle.message("label.itemInfo", item.file.name, size, ext)).apply {
+            val infoLabel = JBLabel(MyBundle.message("label.itemInfo", "", size, ext)).apply {
                 foreground   = UIUtil.getLabelDisabledForeground()
                 font         = JBUI.Fonts.smallFont()
+                alignmentX   = Component.LEFT_ALIGNMENT
             }
             infoPanel.add(infoLabel)
 
@@ -330,6 +334,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                 val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
                     isOpaque = false
                     font = JBUI.Fonts.smallFont()
+                    alignmentX = Component.LEFT_ALIGNMENT
                     addActionListener {
                         item.convertSvg = isSelected
                         onUpdate()
