@@ -2,6 +2,24 @@
 
 # Kmp Resources Unfold Changelog
 
+## [2.0.0]
+### Added
+- **Asset Import Overhaul**: Complete workflow for importing SVGs and raster images into KMP modules.
+- **SVG to XML Conversion**: Automatic conversion of SVGs to Android Vector Drawables with a user-controlled toggle.
+- **Multi-Density Support**: Automatic detection and grouping of density-specific variants (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi) using Figma naming conventions.
+- **Manual Density Selection**: Fine-grained control over density buckets for each variant with automatic conflict swapping.
+- **Path Previews**: Real-time preview of exact target paths for all assets being imported.
+- **Robust Directory Handling**: Automatic creation of `composeResources` and density-specific directories if they are missing.
+- **Smart Prefixing**: Optional automatic `ic_` or `img_` prefixing based on file type during import.
+- **Checkerboard Backgrounds**: Native-style chessboard background for all icon and image previews for better transparency visibility.
+
+### Changed
+- **Unified Import UI**: A professional, consistent multi-step dialog for configuring and reviewing asset imports.
+- **Localization**: Migrated hardcoded UI strings to `MyBundle` for better project maintainability and future localization.
+
+### Removed
+- **Project Cleanup**: Removed legacy test infrastructure, CI/CD test jobs, and external quality analysis tools (Qodana, Kover) to streamline the build process.
+
 ## [1.0.0]
 ### Added
 - **Smart Resource Filtering**: `strings.xml` files are now intelligently hidden from visual asset lists and only appear when the "Strings" filter is active.
