@@ -60,10 +60,18 @@ data class ImportedDrawableItem(
             ResourceExtension.SVG.extension, ResourceExtension.XML.extension -> "ic_"
             else -> "img_"
         }
-        name = if (enabled) {
-            if (baseName.startsWith(prefix)) baseName else "${prefix}$baseName"
+        
+        // Remove existing prefix if present to normalize
+        val currentName = if (name.startsWith("ic_") || name.startsWith("img_")) {
+            name.substringAfter("_")
         } else {
-            baseName
+            name
+        }
+
+        name = if (enabled) {
+            "${prefix}${currentName}"
+        } else {
+            currentName
         }
     }
 }
