@@ -12,8 +12,9 @@
 </p>
 
 <!-- Plugin description -->
-**Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **IntelliJ IDEA** developers. It bridges a major gap in the IDE by providing visual management for assets across all your Kotlin Multiplatform (KMP) modules.
+**Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **IntelliJ IDEA** developers. It bridges a major gap in the IDE by providing visual management and robust import capabilities for assets across all your Kotlin Multiplatform (KMP) modules.
 
+* **Professional Asset Importing**: A complete workflow for importing SVGs and raster images, with automatic density grouping, SVG-to-XML conversion, and prefixing.
 * **Native XML Rendering**: Render **Android Vector Drawables (.xml)** directly in the list.
 * **Unified Asset Explorer**: Browse XML vectors, SVGs, and raster images from all modules.
 * **Seamless Integration**: Designed to feel like a native part of the IDE UI.
@@ -30,6 +31,11 @@ https://github.com/user-attachments/assets/34a81c21-15e3-469e-ba78-acd53de2c3d9
 
 ## 🛠 Features
 
+* **Advanced Asset Importing**:
+    * **SVG to XML**: Automatically converts SVGs to Android Vector Drawables on import.
+    * **Multi-Density Support**: Auto-detects and groups images by density (e.g., `image@2x.png` -> `drawable-xhdpi/image.png`).
+    * **Smart Prefixing**: Optionally applies standard `ic_` (vector) or `img_` (image) prefixes.
+    * **Live Previews**: Preview assets and their exact target paths before importing.
 * **Instant Previews**: High-fidelity rendering of vectors with support for gradients and transparency.
 * **Design Tab**: A specialized file editor tab for Vector assets featuring:
     * **Smooth Zoom**: Precise control over preview size.
