@@ -12,6 +12,7 @@
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.github.mohamedshemees.kmpresourcesunfold.bridge.FigmaBridgeStartupActivity"/>
         <toolWindow
                 factoryClass="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.MyToolWindowFactory"
                 id="Kmp Resources Unfold"

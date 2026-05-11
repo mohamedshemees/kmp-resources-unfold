@@ -1,6 +1,7 @@
 package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 
 import com.github.mohamedshemees.kmpresourcesunfold.*
+import com.github.mohamedshemees.kmpresourcesunfold.bridge.FigmaBridgeService
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -137,9 +138,18 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         val searchPanel = JPanel(BorderLayout())
         searchPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
         searchPanel.add(searchField, BorderLayout.CENTER)
+        
+        val portLabel = JLabel("Figma Bridge running on port: ${FigmaBridgeService.getInstance(project).activePort ?: "Starting..."}")
+        val portPanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
+        portPanel.border = BorderFactory.createEmptyBorder(0, 5, 5, 5)
+        portPanel.add(portLabel)
+
+        val southPanel = JPanel(BorderLayout())
+        southPanel.add(searchPanel, BorderLayout.NORTH)
+        southPanel.add(portPanel, BorderLayout.SOUTH)
 
         topPanel.add(filterPanel, BorderLayout.NORTH)
-        topPanel.add(searchPanel, BorderLayout.SOUTH)
+        topPanel.add(southPanel, BorderLayout.SOUTH)
 
         val resourceModel = DefaultListModel<Any>()
         val resourceList = JBList(resourceModel).apply {
