@@ -1,5 +1,6 @@
 package com.github.mohamedshemees.kmpresourcesunfold
 
+import com.intellij.openapi.diagnostic.Logger
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.InputStream
@@ -8,6 +9,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 object SvgToXmlConverter {
 
+    private val LOG = Logger.getInstance(SvgToXmlConverter::class.java)
     private const val DEFAULT_VIEWPORT_SIZE = 24
     private const val XML_INDENT = "  "
     private const val DEFAULT_FILL_COLOR = "#FF000000"
@@ -50,6 +52,14 @@ object SvgToXmlConverter {
         val viewportWidth  = if (viewBox.size == 4) viewBox[2] else width.toString()
         val viewportHeight = if (viewBox.size == 4) viewBox[3] else height.toString()
 
+        val masks = mutableMapOf<String, Element>()
+        val allMasks = doc.getElementsByTagName("mask")
+        for (i in 0 until allMasks.length) {
+            val mask = allMasks.item(i) as Element
+            val id = mask.getAttribute("id")
+            if (id.isNotEmpty()) masks[id] = mask
+        }
+
         return buildString {
             append("<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n")
             append("${XML_INDENT}android:width=\"${width}dp\"\n")
@@ -57,59 +67,85 @@ object SvgToXmlConverter {
             append("${XML_INDENT}android:viewportWidth=\"$viewportWidth\"\n")
             append("${XML_INDENT}android:viewportHeight=\"$viewportHeight\">\n")
 
-            val children = svgElement.childNodes
-            for (n in 0 until children.length) {
-                val node = children.item(n)
-                if (node.nodeType != Node.ELEMENT_NODE) continue
-                val el = node as Element
-                when (el.tagName.lowercase()) {
-                    "rect"   -> appendRect(this, el, defaultFill, minX, minY)
-                    "path"   -> appendPath(this, el, defaultFill, minX, minY)
-                    "circle" -> appendCircle(this, el, defaultFill, minX, minY)
-                }
-            }
+            processChildren(this, svgElement, defaultFill, minX, minY, masks, 1)
 
             append("</vector>")
         }
     }
 
+    private fun processChildren(
+        sb: StringBuilder, parent: Element, defaultFill: String, 
+        minX: Double, minY: Double, masks: Map<String, Element>, level: Int
+    ) {
+        val children = parent.childNodes
+        for (n in 0 until children.length) {
+            val node = children.item(n)
+            if (node.nodeType != Node.ELEMENT_NODE) continue
+            val el = node as Element
+            when (el.tagName.lowercase()) {
+                "rect"    -> appendRect(sb, el, defaultFill, minX, minY, level)
+                "path"    -> appendPath(sb, el, defaultFill, minX, minY, level)
+                "circle"  -> appendCircle(sb, el, defaultFill, minX, minY, level)
+                "ellipse" -> appendEllipse(sb, el, defaultFill, minX, minY, level)
+                "g"       -> appendGroup(sb, el, defaultFill, minX, minY, masks, level)
+                "mask", "defs", "style", "svg" -> { /* Handled or structural tags */ }
+                else -> LOG.warn("Unhandled SVG tag: ${el.tagName}")
+            }
+        }
+    }
+
+    private fun appendGroup(
+        sb: StringBuilder, el: Element, defaultFill: String, 
+        minX: Double, minY: Double, masks: Map<String, Element>, level: Int
+    ) {
+        val indent = XML_INDENT.repeat(level)
+        val maskAttr = el.getAttribute("mask")
+        val maskId = if (maskAttr.startsWith("url(#")) maskAttr.substring(5, maskAttr.length - 1) else ""
+        val mask = masks[maskId]
+
+        sb.append("${indent}<group>\n")
+        
+        if (mask != null) {
+            val clipPath = findMaskRectPath(mask, minX, minY)
+            if (clipPath != null) {
+                val subIndent = XML_INDENT.repeat(level + 1)
+                sb.append("${subIndent}<clip-path\n")
+                sb.append("${subIndent}${XML_INDENT}android:pathData=\"$clipPath\"/>\n")
+            }
+        }
+
+        processChildren(sb, el, defaultFill, minX, minY, masks, level + 1)
+        sb.append("${indent}</group>\n")
+    }
+
+    private fun findMaskRectPath(mask: Element, minX: Double, minY: Double): String? {
+        val children = mask.childNodes
+        for (i in 0 until children.length) {
+            val node = children.item(i)
+            if (node.nodeType != Node.ELEMENT_NODE) continue
+            val el = node as Element
+            if (el.tagName.lowercase() == "rect") {
+                val x = (el.getAttribute("x").toDoubleOrNull() ?: 0.0) - minX
+                val y = (el.getAttribute("y").toDoubleOrNull() ?: 0.0) - minY
+                val w = el.getAttribute("width").toDoubleOrNull() ?: return null
+                val h = el.getAttribute("height").toDoubleOrNull() ?: return null
+                return "M${fmt(x)},${fmt(y)}h${fmt(w)}v${fmt(h)}h${fmt(-w)}z"
+            }
+        }
+        return null
+    }
+
     private fun appendPath(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double
+        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
     ) {
         val rawPathData = el.getAttribute("d")
         if (rawPathData.isEmpty()) return
         val pathData = bakeTranslation(rawPathData, -minX, -minY)
-        val (fillColor, fillAlpha) = resolveFill(el, defaultFill)
-        val (strokeColor, strokeAlpha) = resolveStroke(el)
-        val strokeWidth = el.getAttribute("stroke-width").trim()
-        val strokeLineCap = el.getAttribute("stroke-linecap").trim()
-        val strokeLineJoin = el.getAttribute("stroke-linejoin").trim()
-
-        val effectiveFillRule = getEffectiveFillRule(el)
-
-        sb.append("${XML_INDENT}<path\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:pathData=\"$pathData\"\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:fillColor=\"$fillColor\"")
-        if (fillAlpha != null) sb.append("\n${XML_INDENT}${XML_INDENT}android:fillAlpha=\"$fillAlpha\"")
-        if (effectiveFillRule == "evenodd") sb.append("\n${XML_INDENT}${XML_INDENT}android:fillType=\"evenOdd\"")
-        if (strokeColor != null) {
-            sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeColor=\"$strokeColor\"")
-            if (strokeAlpha != null) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeAlpha=\"$strokeAlpha\"")
-            if (strokeWidth.isNotEmpty()) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeWidth=\"${fmt(strokeWidth.toDoubleOrNull() ?: 1.0)}\"")
-            if (strokeLineCap.isNotEmpty()) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeLineCap=\"$strokeLineCap\"")
-            if (strokeLineJoin.isNotEmpty()) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeLineJoin=\"$strokeLineJoin\"")
-        }
-        sb.append("/>\n")
-    }
-
-    private fun getEffectiveFillRule(el: Element): String {
-        val fillRule = el.getAttribute("fill-rule").trim().lowercase()
-        val fillRuleFromStyle = Regex("fill-rule\\s*:\\s*(\\S+)").find(el.getAttribute("style"))?.groupValues?.get(1)?.trim()?.lowercase()
-        return fillRule.ifEmpty { fillRuleFromStyle ?: "" }
+        appendShape(sb, el, pathData, defaultFill, level)
     }
 
     private fun appendRect(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double
+        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
     ) {
         val x  = el.getAttribute("x").toDoubleOrNull() ?: 0.0
         val y  = el.getAttribute("y").toDoubleOrNull() ?: 0.0
@@ -134,36 +170,60 @@ object SvgToXmlConverter {
             "L${fmt(l)},${fmt(t + r)}A${fmt(r)},${fmt(r)} 0,0 1,${fmt(l + r)} ${fmt(t)}z"
         }
 
-        val (fillColor, fillAlpha) = resolveFill(el, defaultFill)
-        val (strokeColor, strokeAlpha) = resolveStroke(el)
-        val strokeWidth = el.getAttribute("stroke-width").trim()
-
-        sb.append("${XML_INDENT}<path\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:pathData=\"$pathData\"\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:fillColor=\"$fillColor\"")
-        if (fillAlpha != null) sb.append("\n${XML_INDENT}${XML_INDENT}android:fillAlpha=\"$fillAlpha\"")
-        if (strokeColor != null) {
-            sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeColor=\"$strokeColor\"")
-            if (strokeAlpha != null) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeAlpha=\"$strokeAlpha\"")
-            if (strokeWidth.isNotEmpty()) sb.append("\n${XML_INDENT}${XML_INDENT}android:strokeWidth=\"${fmt(strokeWidth.toDoubleOrNull() ?: 1.0)}\"")
-        }
-        sb.append("/>\n")
+        appendShape(sb, el, pathData, defaultFill, level)
     }
 
     private fun appendCircle(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double
+        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
     ) {
         val cx = (el.getAttribute("cx").toDoubleOrNull() ?: 0.0) - minX
         val cy = (el.getAttribute("cy").toDoubleOrNull() ?: 0.0) - minY
         val r  = el.getAttribute("r").toDoubleOrNull() ?: return
-        val pathData = "M${fmt(cx - r)},${fmt(cy)}" +
-                "a${fmt(r)},${fmt(r)},0,1,0,${fmt(2 * r)},0" +
-                "a${fmt(r)},${fmt(r)},0,1,0,${fmt(-2 * r)},0Z"
+        
+        val pathData = "M${fmt(cx)},${fmt(cy)}m${fmt(-r)},0a${fmt(r)},${fmt(r)} 0,1,1 ${fmt(2 * r)},0a${fmt(r)},${fmt(r)} 0,1,1 ${fmt(-2 * r)},0"
+        
+        appendShape(sb, el, pathData, defaultFill, level)
+    }
+
+    private fun appendEllipse(
+        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
+    ) {
+        val cx = (el.getAttribute("cx").toDoubleOrNull() ?: 0.0) - minX
+        val cy = (el.getAttribute("cy").toDoubleOrNull() ?: 0.0) - minY
+        val rx = el.getAttribute("rx").toDoubleOrNull() ?: return
+        val ry = el.getAttribute("ry").toDoubleOrNull() ?: return
+        
+        val pathData = "M${fmt(cx)},${fmt(cy)}m${fmt(-rx)},0a${fmt(rx)},${fmt(ry)} 0,1,1 ${fmt(2 * rx)},0a${fmt(rx)},${fmt(ry)} 0,1,1 ${fmt(-2 * rx)},0"
+        
+        appendShape(sb, el, pathData, defaultFill, level)
+    }
+
+    private fun appendShape(sb: StringBuilder, el: Element, pathData: String, defaultFill: String, level: Int) {
+        val indent = XML_INDENT.repeat(level)
+        val subIndent = indent + XML_INDENT
+
         val (fillColor, fillAlpha) = resolveFill(el, defaultFill)
-        sb.append("${XML_INDENT}<path\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:pathData=\"$pathData\"\n")
-        sb.append("${XML_INDENT}${XML_INDENT}android:fillColor=\"$fillColor\"")
-        if (fillAlpha != null) sb.append("\n${XML_INDENT}${XML_INDENT}android:fillAlpha=\"$fillAlpha\"")
+        val (strokeColor, strokeAlpha) = resolveStroke(el)
+        val strokeWidth = el.getAttribute("stroke-width").trim()
+        val strokeLineCap = el.getAttribute("stroke-linecap").trim()
+        val strokeLineJoin = el.getAttribute("stroke-linejoin").trim()
+
+        val effectiveFillRule = getEffectiveFillRule(el)
+
+        sb.append("${indent}<path\n")
+        sb.append("${subIndent}android:pathData=\"$pathData\"\n")
+        sb.append("${subIndent}android:fillColor=\"$fillColor\"")
+        
+        if (fillAlpha != null) sb.append("\n${subIndent}android:fillAlpha=\"$fillAlpha\"")
+        if (effectiveFillRule == "evenodd") sb.append("\n${subIndent}android:fillType=\"evenOdd\"")
+        
+        if (strokeColor != null) {
+            sb.append("\n${subIndent}android:strokeColor=\"$strokeColor\"")
+            if (strokeAlpha != null) sb.append("\n${subIndent}android:strokeAlpha=\"$strokeAlpha\"")
+            if (strokeWidth.isNotEmpty()) sb.append("\n${subIndent}android:strokeWidth=\"${fmt(strokeWidth.toDoubleOrNull() ?: 1.0)}\"")
+            if (strokeLineCap.isNotEmpty()) sb.append("\n${subIndent}android:strokeLineCap=\"$strokeLineCap\"")
+            if (strokeLineJoin.isNotEmpty()) sb.append("\n${subIndent}android:strokeLineJoin=\"$strokeLineJoin\"")
+        }
         sb.append("/>\n")
     }
 
@@ -202,6 +262,12 @@ object SvgToXmlConverter {
             formatAlpha(strokeOpacityStr.toDoubleOrNull() ?: 1.0)
         else hexAlpha
         return Pair(color, alpha)
+    }
+
+    private fun getEffectiveFillRule(el: Element): String {
+        val fillRule = el.getAttribute("fill-rule").trim().lowercase()
+        val fillRuleFromStyle = Regex("fill-rule\\s*:\\s*(\\S+)").find(el.getAttribute("style"))?.groupValues?.get(1)?.trim()?.lowercase()
+        return fillRule.ifEmpty { fillRuleFromStyle ?: "" }
     }
 
     private sealed class PathToken {
