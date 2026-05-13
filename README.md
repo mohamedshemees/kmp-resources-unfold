@@ -14,6 +14,7 @@
 <!-- Plugin description -->
 **Kmp Resources Unfold** is a professional productivity tool designed for **Android Studio** and **IntelliJ IDEA** developers. It bridges a major gap in the IDE by providing visual management and robust import capabilities for assets across all your Kotlin Multiplatform (KMP) modules.
 
+* **Figma Bridge Integration**: Seamlessly import assets directly from Figma via a local HTTP server into the Import Dialog. Get the Figma Plugin: [KMP Resources Unfold](https://www.figma.com/community/plugin/1604528003423822682)
 * **Professional Asset Importing**: A complete workflow for importing SVGs and raster images, with automatic density grouping, SVG-to-XML conversion, and prefixing.
 * **Native XML Rendering**: Render **Android Vector Drawables (.xml)** directly in the list.
 * **Unified Asset Explorer**: Browse XML vectors, SVGs, and raster images from all modules.
@@ -31,6 +32,8 @@ https://github.com/user-attachments/assets/34a81c21-15e3-469e-ba78-acd53de2c3d9
 
 ## 🛠 Features
 
+* **Figma Bridge Integration**: Seamlessly import assets directly from Figma via a local HTTP server.
+    *   **Get the Figma Plugin**: [KMP Resources Unfold](https://www.figma.com/community/plugin/1604528003423822682)
 * **Advanced Asset Importing**:
     * **SVG to XML**: Automatically converts SVGs to Android Vector Drawables on import.
     * **Multi-Density Support**: Auto-detects and groups images by density (e.g., `image@2x.png` -> `drawable-xhdpi/image.png`).

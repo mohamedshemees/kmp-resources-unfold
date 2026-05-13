@@ -2,6 +2,16 @@
 
 # Kmp Resources Unfold Changelog
 
+## [2.1.0]
+### Added
+- **Figma Bridge Integration**: Seamlessly import assets directly from Figma into Android Studio via a local HTTP server (port 6789). Images are processed in-memory and pre-loaded into the Import Dialog. Get the Figma Plugin: [TokenzUnfold](https://www.figma.com/community/plugin/1604528003423822682)
+
+### Fixed
+- **Improved SVG to XML Conversion**:
+    - Corrected handling of SVG `<mask>` and `<g mask="url(#id)">` elements, converting masks to Android `<clip-path>`.
+    - Fixed circle and ellipse path data generation for accurate rendering, matching native Android Studio importer.
+    - Enhanced stroke property handling for all shapes (rect, circle, ellipse, path).
+
 ## [2.0.0]
 ### Added
 - **Asset Import Overhaul**: Complete workflow for importing SVGs and raster images into KMP modules.
