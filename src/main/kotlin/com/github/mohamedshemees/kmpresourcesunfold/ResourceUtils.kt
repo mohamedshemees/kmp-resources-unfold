@@ -33,9 +33,9 @@ object ResourceUtils {
     fun getComposeResourcesDir(module: Module, project: Project): VirtualFile? {
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         for (root in contentRoots) {
+            // Strictly look for resources under src/
             com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "commonMain", "composeResources")?.let { return it }
-            if (root.name == "composeResources") return root
-            com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "composeResources")?.let { return it }
+            com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "main", "composeResources")?.let { return it }
         }
         return null
     }
@@ -43,10 +43,9 @@ object ResourceUtils {
     fun getAndroidResourcesDir(module: Module, project: Project): VirtualFile? {
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         for (root in contentRoots) {
+            // Strictly look for resources under src/
             com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "androidMain", ResourceConstants.ANDROID_RES_DIR)?.let { return it }
             com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "main", ResourceConstants.ANDROID_RES_DIR)?.let { return it }
-            if (root.name == ResourceConstants.ANDROID_RES_DIR) return root
-            com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, ResourceConstants.ANDROID_RES_DIR)?.let { return it }
         }
         return null
     }

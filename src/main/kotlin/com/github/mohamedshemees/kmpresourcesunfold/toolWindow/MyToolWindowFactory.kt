@@ -150,32 +150,39 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         moduleBox.isEditable = true
         val editor = moduleBox.editor.editorComponent as JTextField
         var isFiltering = false
+        var lastSelectedModule: ModuleOption? = null
         val allModulesOption = ModuleOption(MyBundle.message("item.allModules"), MyBundle.message("item.allModules"))
+        val allModuleOptions = mutableListOf<ModuleOption>()
         
         updateModuleBox = {
             val selectedBefore = moduleBox.selectedItem as? ModuleOption
-            val allOptions = mutableListOf<ModuleOption>()
-            allOptions.add(allModulesOption)
+            allModuleOptions.clear()
+            allModuleOptions.add(allModulesOption)
             availableModules.forEach {
                 val cleanName = with(ResourceUtils) { it.cleanModuleName() }
-                allOptions.add(ModuleOption(it, cleanName))
+                allModuleOptions.add(ModuleOption(it, cleanName))
             }
             
             isFiltering = true
             moduleBox.removeAllItems()
-            allOptions.forEach { moduleBox.addItem(it) }
+            allModuleOptions.forEach { moduleBox.addItem(it) }
             
             if (selectedBefore != null) {
-                val found = (0 until moduleBox.itemCount).find { moduleBox.getItemAt(it).name == selectedBefore.name }
+                val found = allModuleOptions.find { it.name == selectedBefore.name }
                 if (found != null) {
-                    moduleBox.selectedIndex = found
+                    moduleBox.selectedItem = found
+                    lastSelectedModule = found
+                } else {
+                    moduleBox.selectedIndex = 0
+                    lastSelectedModule = allModulesOption
                 }
             } else {
                 moduleBox.selectedIndex = 0
+                lastSelectedModule = allModulesOption
             }
             isFiltering = false
         }
-        
+
         editor.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: DocumentEvent) = filter()
             override fun removeUpdate(e: DocumentEvent) = filter()
@@ -184,50 +191,72 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             fun filter() {
                 if (isFiltering) return
                 SwingUtilities.invokeLater {
-                    isFiltering = true
+                    if (isFiltering) return@invokeLater
+                    
                     val text = editor.text
-                    val caret = editor.caretPosition
+                    val currentSelected = moduleBox.selectedItem as? ModuleOption
+                    val isExactMatch = currentSelected != null && currentSelected.displayName == text
                     
-                    val allOptions = mutableListOf<ModuleOption>()
-                    allOptions.add(allModulesOption)
-                    availableModules.forEach {
-                        val cleanName = with(ResourceUtils) { it.cleanModuleName() }
-                        allOptions.add(ModuleOption(it, cleanName))
-                    }
-                    
-                    moduleBox.removeAllItems()
-                    allOptions.filter { it.displayName.lowercase().contains(text.lowercase()) }.forEach { moduleBox.addItem(it) }
-                    
-                    editor.text = text
-                    editor.caretPosition = caret
-                    if (moduleBox.itemCount > 0 && !moduleBox.isPopupVisible && editor.hasFocus()) {
-                        moduleBox.showPopup()
-                    }
-                    isFiltering = false
-                    
-                    val exactMatch = allOptions.find { it.displayName == text }
-                    if (exactMatch != null && moduleBox.selectedItem != exactMatch) {
+                    if (!isExactMatch) {
                         isFiltering = true
-                        moduleBox.selectedItem = exactMatch
+                        val caret = editor.caretPosition
+                        moduleBox.removeAllItems()
+                        val matches = allModuleOptions.filter { it.displayName.lowercase().contains(text.lowercase()) }
+                        matches.forEach { moduleBox.addItem(it) }
+                        
+                        editor.text = text
+                        editor.caretPosition = caret
+                        
+                        if (matches.isNotEmpty() && !moduleBox.isPopupVisible && editor.hasFocus()) {
+                            moduleBox.showPopup()
+                        }
                         isFiltering = false
                     }
-                    
                     updateList()
                 }
             }
         })
         
+        moduleBox.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
+            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {}
+            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {
+                SwingUtilities.invokeLater {
+                    isFiltering = true
+                    val currentSelected = moduleBox.selectedItem
+                    moduleBox.removeAllItems()
+                    allModuleOptions.forEach { moduleBox.addItem(it) }
+                    moduleBox.selectedItem = currentSelected
+                    isFiltering = false
+                }
+            }
+            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
+        })
+
+        editor.addActionListener {
+            moduleBox.hidePopup()
+            val text = editor.text
+            val match = allModuleOptions.find { it.displayName == text } ?: if (moduleBox.itemCount > 0) moduleBox.getItemAt(0) else null
+            if (match != null) {
+                isFiltering = true
+                moduleBox.selectedItem = match
+                editor.text = match.displayName
+                isFiltering = false
+                if (match != lastSelectedModule) {
+                    lastSelectedModule = match
+                    updateList()
+                }
+            }
+        }
+
         updateModuleBox()
 
         moduleBox.addActionListener { 
             if (!isFiltering) {
-                val exactMatch = (0 until moduleBox.itemCount).map { moduleBox.getItemAt(it) }.find { it.displayName == editor.text }
-                if (exactMatch != null && moduleBox.selectedItem != exactMatch) {
-                    isFiltering = true
-                    moduleBox.selectedItem = exactMatch
-                    isFiltering = false
+                val selected = moduleBox.selectedItem as? ModuleOption
+                if (selected != null && selected != lastSelectedModule) {
+                    lastSelectedModule = selected
+                    updateList() 
                 }
-                updateList() 
             }
         }
 
