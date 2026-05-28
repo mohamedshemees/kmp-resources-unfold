@@ -61,7 +61,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val file: VirtualFile?,
         val isCustom: Boolean = false
     ) {
-        override fun toString(): String = if (module != null) "${module.name}: $label" else label
+        override fun toString(): String {
+            val cleanName = module?.name?.let { with(ResourceUtils) { it.cleanModuleName() } }
+            return if (cleanName != null) "$cleanName: $label" else label
+        }
     }
 
     private val previousAction = object : AbstractAction(MyBundle.message("button.previous")) {
@@ -380,11 +383,40 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             border = JBUI.Borders.empty(20)
         }
         
-        targetBox.removeAllItems()
+        targetBox.isEditable = true
+        val editor = targetBox.editor.editorComponent as JTextField
+        var isFiltering = false
+        var lastSelectedTarget: TargetOption? = null
         
+        lateinit var allTargetOptions: List<TargetOption>
+        
+        val updateTargetBox = {
+            val selectedBefore = targetBox.selectedItem as? TargetOption
+            isFiltering = true
+            targetBox.removeAllItems()
+            allTargetOptions.forEach {
+                targetBox.addItem(it)
+            }
+            if (selectedBefore != null) {
+                val found = allTargetOptions.find { it == selectedBefore }
+                if (found != null) {
+                    targetBox.selectedItem = found
+                    lastSelectedTarget = found
+                } else if (targetBox.itemCount > 0) {
+                    targetBox.selectedIndex = 0
+                    lastSelectedTarget = allTargetOptions[0]
+                }
+            } else if (targetBox.itemCount > 0) {
+                targetBox.selectedIndex = 0
+                lastSelectedTarget = allTargetOptions[0]
+            }
+            isFiltering = false
+        }
+        
+        val optionsList = mutableListOf<TargetOption>()
         if (ResourceUtils.isFlutterProject(project)) {
             val existingAssets = project.guessProjectDir()?.findChild("assets")
-            targetBox.addItem(TargetOption(null, "assets", "Assets", existingAssets))
+            optionsList.add(TargetOption(null, "assets", "Assets", existingAssets))
         } else {
             val sourceSetSuffixes = listOf("commonMain", "androidMain", "iosMain", "desktopMain", "jsMain", "wasmJsMain", "nativeMain", "appleMain")
             val modules = ModuleManager.getInstance(project).modules.filter { module ->
@@ -398,17 +430,78 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             modules.forEach { module ->
                 val existingTargets = ResourceUtils.getAllResourceDirs(module, project)
                 
-                targetBox.addItem(TargetOption(module, "commonMain", "Compose", existingTargets.find { it.first == "Compose" }?.second))
-                targetBox.addItem(TargetOption(module, "androidMain", "Android", existingTargets.find { it.first == "Android" }?.second))
+                optionsList.add(TargetOption(module, "commonMain", "Compose", existingTargets.find { it.first == "Compose" }?.second))
+                optionsList.add(TargetOption(module, "androidMain", "Android", existingTargets.find { it.first == "Android" }?.second))
                 
                 val existingAssets = com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
                     .firstNotNullOfOrNull { com.intellij.openapi.vfs.VfsUtil.findRelativeFile(it, "assets") }
-                targetBox.addItem(TargetOption(module, "assets", "Assets", existingAssets))
+                optionsList.add(TargetOption(module, "assets", "Assets", existingAssets))
             }
         }
+        
+        allTargetOptions = optionsList
+
+        editor.document.addDocumentListener(object : javax.swing.event.DocumentListener {
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent) = filter()
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent) = filter()
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent) = filter()
+            
+            fun filter() {
+                if (isFiltering) return
+                SwingUtilities.invokeLater {
+                    if (isFiltering) return@invokeLater
+                    
+                    val text = editor.text
+                    val currentSelected = targetBox.selectedItem as? TargetOption
+                    val isExactMatch = currentSelected != null && currentSelected.toString() == text
+                    
+                    if (!isExactMatch) {
+                        isFiltering = true
+                        val caret = editor.caretPosition
+                        targetBox.removeAllItems()
+                        val matches = allTargetOptions.filter {
+                            it.toString().lowercase().contains(text.lowercase())
+                        }
+                        matches.forEach { targetBox.addItem(it) }
+                        
+                        editor.text = text
+                        editor.caretPosition = caret
+                        if (matches.isNotEmpty() && !targetBox.isPopupVisible && editor.hasFocus()) {
+                            targetBox.showPopup()
+                        }
+                        isFiltering = false
+                    }
+                }
+            }
+        })
+        
+        targetBox.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
+            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {
+                SwingUtilities.invokeLater {
+                    if (targetBox.itemCount < allTargetOptions.size) {
+                        isFiltering = true
+                        val currentSelected = targetBox.selectedItem
+                        targetBox.removeAllItems()
+                        allTargetOptions.forEach { targetBox.addItem(it) }
+                        targetBox.selectedItem = currentSelected
+                        isFiltering = false
+                    }
+                }
+            }
+            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {}
+            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
+        })
+
+        updateTargetBox()
 
         targetBox.addActionListener {
-            refreshStep2()
+            if (!isFiltering) {
+                val selected = targetBox.selectedItem as? TargetOption
+                if (selected != null && selected != lastSelectedTarget) {
+                    lastSelectedTarget = selected
+                    refreshStep2()
+                }
+            }
         }
 
         val form = panel {

@@ -42,6 +42,10 @@ import javax.swing.event.DocumentListener
 data class ResourceParent(val name: String, val icon: Icon?, val representativeFile: VirtualFile?)
 data class ResourceChild(val file: VirtualFile, val density: String)
 
+data class ModuleOption(val name: String, val displayName: String) {
+    override fun toString() = displayName
+}
+
 class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
     private var allFiles = listOf<VirtualFile>()
@@ -62,18 +66,20 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val mainPanel = SimpleToolWindowPanel(true, true)
         lateinit var updateList: () -> Unit
+        lateinit var updateModuleBox: () -> Unit
+
+        var availableModules = listOf<String>()
 
         val refreshData = {
             ResourceIconProvider.clearCache()
             allFiles = KmpResourceScanner.findComposeDrawables(project)
             allStringResources = StringResourceProcessor.findStringResources(project, allFiles)
+            availableModules = allFiles.mapNotNull { file ->
+                ModuleUtilCore.findModuleForFile(file, project)?.name
+            }.distinct().sorted()
         }
 
         refreshData()
-
-        val availableModules = allFiles.mapNotNull { file ->
-            ModuleUtilCore.findModuleForFile(file, project)?.name
-        }.distinct().sorted()
 
         val actionGroup = DefaultActionGroup()
         val addAction = object : AnAction(MyBundle.message("action.import.title"), MyBundle.message("action.import.description"), com.intellij.icons.AllIcons.General.Add) {
@@ -98,6 +104,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         ) {
             override fun actionPerformed(e: AnActionEvent) {
                 refreshData()
+                updateModuleBox()
                 updateList()
             }
         }
@@ -131,6 +138,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 override fun after(events: List<VFileEvent>) {
                     UIUtil.invokeLaterIfNeeded {
                         refreshData()
+                        updateModuleBox()
                         updateList()
                     }
                 }
@@ -138,9 +146,91 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
         val modulePanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
         modulePanel.add(JLabel(MyBundle.message("label.module")))
-        val moduleBox = ComboBox<String>()
-        moduleBox.addItem(MyBundle.message("item.allModules"))
-        availableModules.forEach { moduleBox.addItem(it) }
+        val moduleBox = ComboBox<ModuleOption>()
+        moduleBox.isEditable = true
+        val editor = moduleBox.editor.editorComponent as JTextField
+        var isFiltering = false
+        val allModulesOption = ModuleOption(MyBundle.message("item.allModules"), MyBundle.message("item.allModules"))
+        
+        updateModuleBox = {
+            val selectedBefore = moduleBox.selectedItem as? ModuleOption
+            val allOptions = mutableListOf<ModuleOption>()
+            allOptions.add(allModulesOption)
+            availableModules.forEach {
+                val cleanName = with(ResourceUtils) { it.cleanModuleName() }
+                allOptions.add(ModuleOption(it, cleanName))
+            }
+            
+            isFiltering = true
+            moduleBox.removeAllItems()
+            allOptions.forEach { moduleBox.addItem(it) }
+            
+            if (selectedBefore != null) {
+                val found = (0 until moduleBox.itemCount).find { moduleBox.getItemAt(it).name == selectedBefore.name }
+                if (found != null) {
+                    moduleBox.selectedIndex = found
+                }
+            } else {
+                moduleBox.selectedIndex = 0
+            }
+            isFiltering = false
+        }
+        
+        editor.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = filter()
+            override fun removeUpdate(e: DocumentEvent) = filter()
+            override fun changedUpdate(e: DocumentEvent) = filter()
+            
+            fun filter() {
+                if (isFiltering) return
+                SwingUtilities.invokeLater {
+                    isFiltering = true
+                    val text = editor.text
+                    val caret = editor.caretPosition
+                    
+                    val allOptions = mutableListOf<ModuleOption>()
+                    allOptions.add(allModulesOption)
+                    availableModules.forEach {
+                        val cleanName = with(ResourceUtils) { it.cleanModuleName() }
+                        allOptions.add(ModuleOption(it, cleanName))
+                    }
+                    
+                    moduleBox.removeAllItems()
+                    allOptions.filter { it.displayName.lowercase().contains(text.lowercase()) }.forEach { moduleBox.addItem(it) }
+                    
+                    editor.text = text
+                    editor.caretPosition = caret
+                    if (moduleBox.itemCount > 0 && !moduleBox.isPopupVisible && editor.hasFocus()) {
+                        moduleBox.showPopup()
+                    }
+                    isFiltering = false
+                    
+                    val exactMatch = allOptions.find { it.displayName == text }
+                    if (exactMatch != null && moduleBox.selectedItem != exactMatch) {
+                        isFiltering = true
+                        moduleBox.selectedItem = exactMatch
+                        isFiltering = false
+                    }
+                    
+                    updateList()
+                }
+            }
+        })
+        
+        updateModuleBox()
+
+        moduleBox.addActionListener { 
+            if (!isFiltering) {
+                val exactMatch = (0 until moduleBox.itemCount).map { moduleBox.getItemAt(it) }.find { it.displayName == editor.text }
+                if (exactMatch != null && moduleBox.selectedItem != exactMatch) {
+                    isFiltering = true
+                    moduleBox.selectedItem = exactMatch
+                    isFiltering = false
+                }
+                updateList() 
+            }
+        }
+
         modulePanel.add(moduleBox)
 
         filterPanel.add(chipPanel, BorderLayout.NORTH)
@@ -230,7 +320,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             resourceModel.clear()
             val lowerSearch = searchField.text.lowercase()
             val allModulesStr = MyBundle.message("item.allModules")
-            val selectedModule = moduleBox.selectedItem as String
+            val selectedModule = (moduleBox.selectedItem as? ModuleOption)?.name ?: ""
 
             val filteredFiles = allFiles.filter { file ->
                 val ext = ResourceExtension.fromExtension(file.extension)
@@ -299,7 +389,6 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             override fun removeUpdate(e: DocumentEvent) = updateList()
             override fun changedUpdate(e: DocumentEvent) = updateList()
         })
-        moduleBox.addActionListener { updateList() }
 
         val contentPanel = JPanel(BorderLayout())
         contentPanel.add(topPanel, BorderLayout.NORTH)

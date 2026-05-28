@@ -9,6 +9,11 @@ import java.util.Locale
 import kotlin.math.ln
 
 object ResourceUtils {
+    fun String.cleanModuleName(): String {
+        val cleaned = this.replace(Regex("(?i)^\\.?mena\\.?"), "")
+        return if (cleaned.isEmpty()) this else cleaned
+    }
+
     fun formatSize(bytes: Long): String {
         if (bytes < 1024) return MyBundle.message("unit.bytes", bytes.toString())
         val exp = (ln(bytes.toDouble()) / ln(1024.0)).toInt()

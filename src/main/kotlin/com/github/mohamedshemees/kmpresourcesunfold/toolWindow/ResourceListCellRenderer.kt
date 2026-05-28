@@ -37,7 +37,9 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.foreground = JBColor.GRAY
                 label.font = label.font.deriveFont(11f)
                 
-                val moduleName = ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown"
+                val moduleName = (ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown").let {
+                    with(ResourceUtils) { it.cleanModuleName() }
+                }
                 subLabel.text = moduleName
                 subLabel.foreground = JBColor.LIGHT_GRAY
                 subLabel.font = subLabel.font.deriveFont(9f)
@@ -55,7 +57,9 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.icon = UIManager.getIcon("FileView.fileIcon")
                 label.font = label.font.deriveFont(Font.BOLD, 12f)
                 
-                val moduleName = ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown"
+                val moduleName = (ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown").let {
+                    with(ResourceUtils) { it.cleanModuleName() }
+                }
                 subLabel.text = moduleName
                 subLabel.foreground = JBColor.GRAY
                 subLabel.font = subLabel.font.deriveFont(10f)
@@ -83,7 +87,9 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.icon = ResourceIconProvider.getIcon(value)
                 label.font = label.font.deriveFont(Font.BOLD, 12f)
                 
-                val moduleName = ModuleUtilCore.findModuleForFile(value, project)?.name ?: "Unknown"
+                val moduleName = (ModuleUtilCore.findModuleForFile(value, project)?.name ?: "Unknown").let {
+                    with(ResourceUtils) { it.cleanModuleName() }
+                }
                 subLabel.text = moduleName
                 subLabel.foreground = JBColor.GRAY
                 subLabel.font = subLabel.font.deriveFont(10f)
