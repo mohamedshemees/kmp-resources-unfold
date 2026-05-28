@@ -32,6 +32,7 @@ enum class ResourceType(val bundleKey: String) {
 
 object ResourceConstants {
     const val COMPOSE_RESOURCES_DIR = "composeResources"
+    const val ANDROID_RES_DIR = "res"
     const val DRAWABLE_DIR = "drawable"
     const val VALUES_DIR = "values"
     const val STRINGS_FILE = "strings.xml"

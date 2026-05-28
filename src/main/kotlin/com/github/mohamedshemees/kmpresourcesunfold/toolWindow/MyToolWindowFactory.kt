@@ -39,12 +39,25 @@ import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
+data class ResourceParent(val name: String, val icon: Icon?, val representativeFile: VirtualFile?)
+data class ResourceChild(val file: VirtualFile, val density: String)
+
 class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
     private var allFiles = listOf<VirtualFile>()
     private var allStringResources = listOf<StringResource>()
     private var currentTypeFilter = ResourceType.ALL
     private var clickTimer: Timer? = null
+
+    private fun getDensity(file: VirtualFile): String {
+        val parent = file.parent ?: return "Default"
+        val name = parent.name
+        return when {
+            name == "drawable" -> "Default"
+            name.startsWith("drawable-") -> name.substringAfter("drawable-").uppercase()
+            else -> "Default"
+        }
+    }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val mainPanel = SimpleToolWindowPanel(true, true)
@@ -62,7 +75,6 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             ModuleUtilCore.findModuleForFile(file, project)?.name
         }.distinct().sorted()
 
-        // Create Toolbar
         val actionGroup = DefaultActionGroup()
         val addAction = object : AnAction(MyBundle.message("action.import.title"), MyBundle.message("action.import.description"), com.intellij.icons.AllIcons.General.Add) {
             override fun actionPerformed(e: AnActionEvent) {
@@ -157,7 +169,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             isFocusable = false
         }
 
-        resourceList.cellRenderer = ResourceListCellRenderer()
+        resourceList.cellRenderer = ResourceListCellRenderer(project)
 
         resourceList.transferHandler = object : TransferHandler() {
             override fun canImport(support: TransferSupport): Boolean {
@@ -178,11 +190,14 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         resourceList.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 val selected = resourceList.selectedValue ?: return
+                
                 if (e.clickCount == 2) {
                     clickTimer?.stop()
                     val fileToOpen = when (selected) {
-                        is VirtualFile -> selected
+                        is ResourceChild -> selected.file
+                        is ResourceParent -> selected.representativeFile
                         is StringResource -> selected.file
+                        is VirtualFile -> selected
                         else -> null
                     }
                     fileToOpen?.let { FileEditorManager.getInstance(project).openFile(it, true) }
@@ -190,8 +205,10 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     clickTimer?.stop()
                     clickTimer = Timer(250) {
                         val code = when (selected) {
-                            is VirtualFile -> selected.nameWithoutExtension
+                            is ResourceParent -> selected.name
+                            is ResourceChild -> selected.file.nameWithoutExtension
                             is StringResource -> selected.key
+                            is VirtualFile -> selected.nameWithoutExtension
                             else -> ""
                         }
                         if (code.isNotEmpty()) {
@@ -215,44 +232,64 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             val allModulesStr = MyBundle.message("item.allModules")
             val selectedModule = moduleBox.selectedItem as String
 
-            when (currentTypeFilter) {
-                ResourceType.STRINGS -> {
-                    allStringResources.filter { resource ->
-                        val moduleName = ModuleUtilCore.findModuleForFile(resource.file, project)?.name
-                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
-                        val matchesSearch = resource.key.lowercase().contains(lowerSearch)
-                        matchesModule && matchesSearch
-                    }.forEach { resourceModel.addElement(it) }
-
-                    allFiles.filter { it.name == ResourceConstants.STRINGS_FILE }.forEach { file ->
-                        val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
-                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
-                        val matchesSearch = file.name.lowercase().contains(lowerSearch)
-                        if (matchesModule && matchesSearch) {
-                            resourceModel.addElement(file)
-                        }
-                    }
+            val filteredFiles = allFiles.filter { file ->
+                val ext = ResourceExtension.fromExtension(file.extension)
+                val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                val matchesType = when (currentTypeFilter) {
+                    ResourceType.VECTORS -> ResourceExtension.vectorExtensions.contains(ext)
+                    ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
+                    ResourceType.STRINGS -> false
+                    else -> ext != ResourceExtension.XML || !file.path.contains("values")
                 }
+                val matchesSearch = file.name.lowercase().contains(lowerSearch)
+                matchesModule && matchesSearch && matchesType
+            }
 
-                else -> {
-                    allFiles.forEach { file ->
-                        val ext = ResourceExtension.fromExtension(file.extension)
-                        val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
-                        val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
-                        val matchesType = when (currentTypeFilter) {
-                            ResourceType.VECTORS -> ResourceExtension.vectorExtensions.contains(ext)
-                            ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
-                            else -> ext != ResourceExtension.XML || !file.path.contains("values")
-                        }
-                        val matchesSearch = file.name.lowercase().contains(lowerSearch)
+            val filteredStrings = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
+                allStringResources.filter { resource ->
+                    val moduleName = ModuleUtilCore.findModuleForFile(resource.file, project)?.name
+                    val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                    val matchesSearch = resource.key.lowercase().contains(lowerSearch)
+                    matchesModule && matchesSearch
+                }
+            } else emptyList()
 
-                        if (matchesModule && matchesSearch && matchesType) {
-                            resourceModel.addElement(file)
-                        }
+            val filteredStringsFiles = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
+                allFiles.filter { file ->
+                    val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                    val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
+                    val matchesSearch = file.name.lowercase().contains(lowerSearch)
+                    file.name == ResourceConstants.STRINGS_FILE && matchesModule && matchesSearch
+                }
+            } else emptyList()
+
+            if (filteredFiles.isNotEmpty()) {
+                val densityOrder = listOf("Default", "LDPI", "MDPI", "HDPI", "XHDPI", "XXHDPI", "XXXHDPI")
+                val groupedByName = filteredFiles.groupBy { it.nameWithoutExtension }
+                
+                groupedByName.keys.sorted().forEach { name ->
+                    val files = groupedByName[name] ?: return@forEach
+                    val sortedFiles = files.sortedWith(compareBy({ getDensity(it).let { d -> densityOrder.indexOf(d).takeIf { i -> i >= 0 } ?: 100 } }, { it.name }))
+                    
+                    val representative = sortedFiles.find { getDensity(it) == "Default" } ?: sortedFiles.first()
+                    
+                    resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative))
+                    
+                    sortedFiles.forEach { file ->
+                        resourceModel.addElement(ResourceChild(file, getDensity(file)))
                     }
                 }
             }
-            chips.forEach { it.updateCount(resourceModel.size) }
+
+            if (filteredStrings.isNotEmpty() || filteredStringsFiles.isNotEmpty()) {
+                resourceModel.addElement(ResourceParent("Strings", UIManager.getIcon("FileView.fileIcon"), filteredStringsFiles.firstOrNull()))
+                filteredStrings.sortedBy { it.key }.forEach { resourceModel.addElement(it) }
+                filteredStringsFiles.sortedBy { it.name }.forEach { resourceModel.addElement(it) }
+            }
+
+            val totalResourcesCount = filteredFiles.size + filteredStrings.size + filteredStringsFiles.size
+            chips.forEach { it.updateCount(totalResourcesCount) }
         }
 
 

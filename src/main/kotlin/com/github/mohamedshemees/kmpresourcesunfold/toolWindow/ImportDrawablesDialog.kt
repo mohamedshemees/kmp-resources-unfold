@@ -8,8 +8,11 @@ import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -40,7 +43,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
     private lateinit var step1Panel: JPanel
     private lateinit var step2Panel: JPanel
     
-    // Step 1 UI components for preservation
     private val step1ListPanel = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         border = JBUI.Borders.empty()
@@ -51,7 +53,17 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
     }
 
-    private val moduleBox = ComboBox<String>()
+    private val targetBox = ComboBox<TargetOption>()
+    private data class TargetOption(
+        val module: Module?, 
+        val label: String, 
+        val targetType: String,
+        val file: VirtualFile?,
+        val isCustom: Boolean = false
+    ) {
+        override fun toString(): String = if (module != null) "${module.name}: $label" else label
+    }
+
     private val previousAction = object : AbstractAction(MyBundle.message("button.previous")) {
         override fun actionPerformed(e: java.awt.event.ActionEvent?) {
             currentStep = ImportStep.SELECT_RESOURCES
@@ -161,12 +173,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val count = importedItems.size
         countLabel.text = if (count == 1) MyBundle.message("title.step1") else MyBundle.message("title.step1_plural", count)
 
-        // Preserve scroll position
         val scrollPos = step1ScrollPane.verticalScrollBar.value
 
         step1ListPanel.removeAll()
 
-        // Group by name (base name)
         val groupedItems = importedItems.groupBy { it.name }
 
         groupedItems.forEach { (name, items) ->
@@ -184,7 +194,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         step1ListPanel.revalidate()
         step1ListPanel.repaint()
         
-        // Restore scroll position after layout
         SwingUtilities.invokeLater {
             step1ScrollPane.verticalScrollBar.value = scrollPos
         }
@@ -200,7 +209,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             isOpaque = false
         }
 
-        // Header for the group
         val headerPanel = JPanel(BorderLayout(12, 0)).apply {
             border = JBUI.Borders.empty(10, 12, 5, 12)
             isOpaque = false
@@ -238,7 +246,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         
         groupPanel.add(headerPanel, BorderLayout.NORTH)
 
-        // Sub-items (densities)
         val itemsPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
@@ -285,11 +292,17 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         }
 
         if (isSummary) {
-            val module = moduleBox.selectedItem as? String ?: ""
-            val m = ModuleManager.getInstance(project).modules.find { it.name == module }
-            val resDirName = ResourceUtils.getComposeResourcesDir(m ?: return JPanel(), project)?.name ?: "composeResources"
-            val densityDir = "drawable${item.density.directoryQualifier}"
-            val targetPath = "$resDirName/$densityDir/${item.name}.${item.extension}"
+            val selectedTarget = targetBox.selectedItem as? TargetOption
+            val resDir = selectedTarget?.file
+            val resDirName = resDir?.name ?: if (selectedTarget?.targetType == "Android") "res" else if (selectedTarget?.targetType == "Custom") "custom" else "composeResources"
+            val densityDir = if (selectedTarget?.targetType == "Android" || selectedTarget?.targetType == "Compose") "drawable${item.density.directoryQualifier}" else ""
+            val targetPath = if (densityDir.isNotEmpty()) "$resDirName/$densityDir/${item.name}.${item.extension}" else "$resDirName/${item.name}.${item.extension}"
+            
+            val nameLabel = JBLabel(item.name).apply {
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
+                alignmentX = Component.LEFT_ALIGNMENT
+            }
+            infoPanel.add(nameLabel)
             
             val pathLabel = JBLabel(targetPath).apply {
                 font = JBUI.Fonts.smallFont()
@@ -357,7 +370,6 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             itemRowPanel.add(individualRemoveBtn, BorderLayout.EAST)
         }
 
-        // Force fixed height to match Step 1 and prevent stretching
         itemRowPanel.maximumSize = Dimension(Int.MAX_VALUE, itemRowPanel.preferredSize.height)
 
         return itemRowPanel
@@ -368,17 +380,40 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             border = JBUI.Borders.empty(20)
         }
         
-        val availableModules = ModuleManager.getInstance(project).modules.filter { module ->
-            val contentRoots = com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
-            contentRoots.any { it.path.contains("src/commonMain") }
-        }.map { it.name }.sorted()
+        targetBox.removeAllItems()
+        
+        if (ResourceUtils.isFlutterProject(project)) {
+            val existingAssets = project.guessProjectDir()?.findChild("assets")
+            targetBox.addItem(TargetOption(null, "assets", "Assets", existingAssets))
+        } else {
+            val sourceSetSuffixes = listOf("commonMain", "androidMain", "iosMain", "desktopMain", "jsMain", "wasmJsMain", "nativeMain", "appleMain")
+            val modules = ModuleManager.getInstance(project).modules.filter { module ->
+                val name = module.name
+                if (sourceSetSuffixes.any { name.endsWith(".$it") || name == it }) return@filter false
+                
+                val contentRoots = com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
+                contentRoots.any { it.path.contains("src/commonMain") || it.path.contains("src/androidMain") || it.path.contains("src/main") || it.path.contains("assets") || it.path.contains("images") }
+            }.sortedBy { it.name }
 
-        moduleBox.removeAllItems()
-        availableModules.forEach { moduleBox.addItem(it) }
+            modules.forEach { module ->
+                val existingTargets = ResourceUtils.getAllResourceDirs(module, project)
+                
+                targetBox.addItem(TargetOption(module, "commonMain", "Compose", existingTargets.find { it.first == "Compose" }?.second))
+                targetBox.addItem(TargetOption(module, "androidMain", "Android", existingTargets.find { it.first == "Android" }?.second))
+                
+                val existingAssets = com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
+                    .firstNotNullOfOrNull { com.intellij.openapi.vfs.VfsUtil.findRelativeFile(it, "assets") }
+                targetBox.addItem(TargetOption(module, "assets", "Assets", existingAssets))
+            }
+        }
+
+        targetBox.addActionListener {
+            refreshStep2()
+        }
 
         val form = panel {
-            row(MyBundle.message("label.sourceSet")) {
-                cell(moduleBox).align(com.intellij.ui.dsl.builder.AlignX.FILL)
+            row(MyBundle.message("label.targetPackage")) {
+                cell(targetBox).align(com.intellij.ui.dsl.builder.AlignX.FILL)
             }
         }
         
@@ -392,6 +427,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             border = JBUI.Borders.customLine(JBColor.border())
         }
         panel.add(scrollPane, BorderLayout.CENTER)
+
+        if (targetBox.itemCount > 0) {
+            targetBox.selectedIndex = 0
+        }
         
         return panel
     }
@@ -415,6 +454,8 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
     }
 
     private fun refreshStep2() {
+        if (!::step2Panel.isInitialized) return
+        
         val scrollPane = step2Panel.getComponent(1) as JBScrollPane
         val summaryPanel = scrollPane.viewport.view as JPanel
         summaryPanel.removeAll()
@@ -433,6 +474,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         
         summaryPanel.add(Box.createVerticalGlue())
         summaryPanel.revalidate()
+        summaryPanel.repaint()
     }
 
     override fun doOKAction() {
@@ -446,40 +488,70 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
     }
 
     private fun performImport() {
-        val selectedModuleName = moduleBox.selectedItem as? String ?: return
-        val module = ModuleManager.getInstance(project).modules.find { it.name == selectedModuleName } ?: return
+        val selectedTarget = targetBox.selectedItem as? TargetOption ?: return
         
-        val resDir = ResourceUtils.getComposeResourcesDir(module, project) ?: return
+        val itemsToImport = importedItems.filter { !it.doNotImport }
+        if (itemsToImport.isEmpty()) return
 
-        WriteCommandAction.runWriteCommandAction(project) {
-            try {
-                importedItems.filter { !it.doNotImport }.forEach { item ->
-                    val densityDirName = "drawable${item.density.directoryQualifier}"
-                    val targetDir = VfsUtil.createDirectoryIfMissing(resDir, densityDirName) ?: return@forEach
+        val task = object : com.intellij.openapi.progress.Task.Backgroundable(project, MyBundle.message("title.importDrawables"), true) {
+            override fun run(indicator: com.intellij.openapi.progress.ProgressIndicator) {
+                indicator.isIndeterminate = false
+                
+                try {
+                    val resDir = selectedTarget.file ?: ResourceUtils.getOrCreateResourceDir(selectedTarget.module, project, selectedTarget.targetType)
+                        ?: throw IOException("Could not find or create resource directory")
 
-                    if (item.convertSvg) {
-                        val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
-                        val newFileName = "${item.name}.xml"
-                        val existingFile = targetDir.findChild(newFileName)
-                        val newFile = existingFile ?: targetDir.createChildData(this, newFileName)
-                        VfsUtil.saveText(newFile, xmlContent)
-                    } else {
-                        val newFileName = "${item.name}.${item.file.extension}"
-                        val existingFile = targetDir.findChild(newFileName)
-                        if (existingFile != null) {
-                            existingFile.setBinaryContent(item.file.contentsToByteArray())
-                        } else {
-                            val copied = VfsUtil.copy(this, item.file, targetDir)
-                            copied.rename(this, newFileName)
+                    itemsToImport.forEachIndexed { index, item ->
+                        indicator.checkCanceled()
+                        indicator.fraction = index.toDouble() / itemsToImport.size
+                        indicator.text = "Importing ${item.name}..."
+
+                        WriteCommandAction.runWriteCommandAction(project) {
+                            val densityDirName = when (selectedTarget.targetType) {
+                                "Android", "Compose" -> "drawable${item.density.directoryQualifier}"
+                                else -> ""
+                            }
+                            
+                            val targetDir = if (densityDirName.isNotEmpty()) {
+                                VfsUtil.createDirectoryIfMissing(resDir, densityDirName) ?: return@runWriteCommandAction
+                            } else {
+                                resDir
+                            }
+
+                            if (item.convertSvg) {
+                                val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
+                                val newFileName = "${item.name}.xml"
+                                val existingFile = targetDir.findChild(newFileName)
+                                val newFile = existingFile ?: targetDir.createChildData(this, newFileName)
+                                VfsUtil.saveText(newFile, xmlContent)
+                            } else {
+                                val newFileName = "${item.name}.${item.file.extension}"
+                                val existingFile = targetDir.findChild(newFileName)
+                                if (existingFile != null) {
+                                    existingFile.setBinaryContent(item.file.contentsToByteArray())
+                                } else {
+                                    val copied = VfsUtil.copy(this, item.file, targetDir)
+                                    copied.rename(this, newFileName)
+                                }
+                            }
                         }
                     }
+                    
+                    VfsUtil.markDirtyAndRefresh(true, true, true, resDir)
+                } catch (e: Exception) {
+                    UIUtil.invokeLaterIfNeeded {
+                        Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))
+                    }
                 }
-                VfsUtil.markDirtyAndRefresh(true, true, true, resDir)
-            } catch (e: Exception) {
+            }
+
+            override fun onSuccess() {
                 UIUtil.invokeLaterIfNeeded {
-                    Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))
+                    close(OK_EXIT_CODE)
                 }
             }
         }
+
+        com.intellij.openapi.progress.ProgressManager.getInstance().run(task)
     }
 }

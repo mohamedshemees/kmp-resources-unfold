@@ -2,6 +2,14 @@
 
 # Kmp Resources Unfold Changelog
 
+## [Unreleased]
+
+## [2.2.0]
+### Added
+- **Hierarchical Density Grouping**: Resources are now grouped by name with density variations (HDPI, XHDPI, etc.) listed as indented sub-items.
+- **Native Android Support**: Full support for native Android `res` packages alongside Compose Multiplatform `composeResources`.
+- **Improved Import Dialog**: Enhanced module discovery and live path previews for both KMP and Android modules.
+
 ## [2.1.0]
 ### Added
 - **Figma Bridge Integration**: Seamlessly import assets directly from Figma into Android Studio via a local HTTP server (port 6789). Images are processed in-memory and pre-loaded into the Import Dialog. Get the Figma Plugin: [TokenzUnfold](https://www.figma.com/community/plugin/1604528003423822682)
