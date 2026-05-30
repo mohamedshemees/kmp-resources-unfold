@@ -11,8 +11,12 @@ class FigmaBridgeService(project: Project) : Disposable {
     val activePort: Int?
         get() = server.activePort
 
-    fun startServer() {
-        server.start()
+    fun startServer(port: Int = 6789) {
+        server.start(port)
+    }
+
+    fun restartServer(port: Int): Int? {
+        return server.start(port)
     }
 
     override fun dispose() {

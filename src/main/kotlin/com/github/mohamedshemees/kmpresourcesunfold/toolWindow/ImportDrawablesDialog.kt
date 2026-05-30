@@ -27,8 +27,12 @@ import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.*
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 import java.io.IOException
 import javax.swing.*
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 
 class ImportDrawablesDialog(private val project: Project, initialFiles: List<VirtualFile>) : DialogWrapper(project) {
 
@@ -465,10 +469,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         
         allTargetOptions = optionsList
 
-        editor.document.addDocumentListener(object : javax.swing.event.DocumentListener {
-            override fun insertUpdate(e: javax.swing.event.DocumentEvent) = filter()
-            override fun removeUpdate(e: javax.swing.event.DocumentEvent) = filter()
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent) = filter()
+        editor.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = filter()
+            override fun removeUpdate(e: DocumentEvent) = filter()
+            override fun changedUpdate(e: DocumentEvent) = filter()
             
             fun filter() {
                 if (isFiltering) return
@@ -515,10 +519,10 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
         })
 
-        editor.addKeyListener(object : java.awt.event.KeyAdapter() {
-            override fun keyPressed(e: java.awt.event.KeyEvent) {
-                if (e.keyCode == java.awt.event.KeyEvent.VK_ENTER) {
-                    e.consume() // Prevent dialog submission
+        editor.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) {
+                if (e.keyCode == KeyEvent.VK_ENTER) {
+                    e.consume()
                     targetBox.hidePopup()
                     val text = editor.text
                     val match = allTargetOptions.find { it.toString() == text } ?: if (targetBox.itemCount > 0) targetBox.getItemAt(0) else null
@@ -542,11 +546,9 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                 SwingUtilities.invokeLater {
                     isFiltering = true
                     val currentSelected = targetBox.selectedItem
-                    val text = editor.text
                     targetBox.removeAllItems()
                     allTargetOptions.forEach { targetBox.addItem(it) }
                     targetBox.selectedItem = currentSelected
-                    editor.text = text
                     isFiltering = false
                 }
             }

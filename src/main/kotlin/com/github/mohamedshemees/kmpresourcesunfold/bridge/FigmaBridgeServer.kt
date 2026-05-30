@@ -19,11 +19,10 @@ class FigmaBridgeServer(private val project: Project) {
     var activePort: Int? = null
         private set
 
-    fun start(): Int? {
+    fun start(targetPort: Int = 6789): Int? {
         stop()
-        val startPort = 6789
-        var currentPort = startPort
-        val maxTries = 10
+        var currentPort = targetPort
+        val maxTries = 3
 
         for (i in 0 until maxTries) {
             try {
@@ -41,7 +40,7 @@ class FigmaBridgeServer(private val project: Project) {
                 currentPort++
             }
         }
-        LOG.error("Failed to start Figma Bridge Server after $maxTries attempts.")
+        LOG.error("Failed to start Figma Bridge Server on or near $targetPort.")
         return null
     }
 

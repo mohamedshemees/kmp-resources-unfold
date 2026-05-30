@@ -14,6 +14,7 @@ import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.ui.popup.Balloon
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -31,7 +32,9 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Point
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -285,10 +288,43 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         searchPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
         searchPanel.add(searchField, BorderLayout.CENTER)
         
-        val portLabel = JLabel("Figma Bridge running on port: ${FigmaBridgeService.getInstance(project).activePort ?: "Starting..."}")
+        val portOptions = listOf(6789, 6790, 6791, 6792, 6793, 6794, 6795)
+        val portBox = ComboBox<Int>()
+        portOptions.forEach { portBox.addItem(it) }
+        
+        val figmaService = FigmaBridgeService.getInstance(project)
+        val currentActive = figmaService.activePort ?: 6789
+        portBox.selectedItem = currentActive
+
+        val restartAction = object : AnAction("Relaunch Bridge", "Restart Figma Bridge on selected port", com.intellij.icons.AllIcons.Actions.Restart) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val selectedPort = portBox.selectedItem as Int
+                val newPort = figmaService.restartServer(selectedPort)
+                if (newPort != null) {
+                    portBox.selectedItem = newPort
+                    JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
+                        "Figma Bridge restarted on port $newPort",
+                        com.intellij.openapi.ui.MessageType.INFO,
+                        null
+                    ).setFadeoutTime(3000).createBalloon().show(RelativePoint.getCenterOf(portBox), Balloon.Position.above)
+                } else {
+                    Messages.showErrorDialog(project, "Could not start server on port $selectedPort", "Figma Bridge Error")
+                }
+            }
+        }
+        
+        val restartBtn = com.intellij.openapi.actionSystem.impl.ActionButton(
+            restartAction, 
+            restartAction.templatePresentation, 
+            "KmpResourcesUnfold", 
+            Dimension(22, 22)
+        )
+
         val portPanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
         portPanel.border = BorderFactory.createEmptyBorder(0, 5, 5, 5)
-        portPanel.add(portLabel)
+        portPanel.add(JLabel("Figma Bridge Port:"))
+        portPanel.add(portBox)
+        portPanel.add(restartBtn)
 
         val southPanel = JPanel(BorderLayout())
         southPanel.add(searchPanel, BorderLayout.NORTH)
