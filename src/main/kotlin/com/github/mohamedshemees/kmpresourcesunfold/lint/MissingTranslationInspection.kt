@@ -9,6 +9,10 @@ import com.intellij.psi.xml.XmlTag
 
 class MissingTranslationInspection : LocalInspectionTool() {
 
+    override fun getStaticDescription(): String {
+        return "Detects string resource definitions in XML that are missing translations in one or more locales."
+    }
+
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : XmlElementVisitor() {
             override fun visitXmlTag(tag: XmlTag) {

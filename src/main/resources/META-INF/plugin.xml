@@ -32,6 +32,12 @@
                          enabledByDefault="true"
                          level="WARNING"
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.MissingTranslationInspection"/>
+        <localInspection language="kotlin"
+                         displayName="Missing resource translation (Kotlin)"
+                         groupName="KMP resources"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.KotlinMissingTranslationInspection"/>
 
         <iconProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.ResourceFileIconProvider" order="first"/>
     </extensions>

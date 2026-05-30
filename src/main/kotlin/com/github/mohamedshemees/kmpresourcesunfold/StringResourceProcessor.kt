@@ -74,6 +74,17 @@ object StringResourceProcessor {
         return missingIn
     }
 
+    fun getMissingTranslationsByKey(project: Project, key: String): List<String> {
+        val stringFiles = com.intellij.psi.search.FilenameIndex.getVirtualFilesByName(ResourceConstants.STRINGS_FILE, com.intellij.psi.search.GlobalSearchScope.projectScope(project))
+        val defaultFile = stringFiles.find { 
+            val psiFile = PsiManager.getInstance(project).findFile(it) as? XmlFile
+            val rootTag = psiFile?.rootTag
+            rootTag?.findSubTags("string")?.any { tag -> tag.getAttributeValue("name") == key } == true
+        } ?: return emptyList()
+
+        return getMissingTranslations(project, defaultFile, key)
+    }
+
     private fun parseStrings(project: Project, file: VirtualFile): Map<String, String> {
         val psiFile = PsiManager.getInstance(project).findFile(file) as? XmlFile ?: return emptyMap()
         val rootTag = psiFile.rootTag ?: return emptyMap()
