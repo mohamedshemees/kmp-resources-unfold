@@ -296,11 +296,15 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
         if (isSummary) {
             val editorText = (targetBox.editor.editorComponent as JTextField).text
-            val (baseType, subPath) = parseTargetText(editorText)
+            val (_, baseType, subPath) = parseTargetText(editorText)
             
             val selectedTarget = targetBox.selectedItem as? TargetOption
-            val resDir = selectedTarget?.file
-            val resDirName = resDir?.name ?: if (baseType == "Android") "res" else if (baseType == "Assets") "assets" else "composeResources"
+            val resDirName = selectedTarget?.file?.name ?: when(baseType) {
+                "Android" -> "res"
+                "Compose" -> "composeResources"
+                "Assets" -> "assets"
+                else -> baseType.ifEmpty { "composeResources" }
+            }
             
             val folderBase = if (subPath != null) subPath.replace(".", "/") else "drawable"
             val densityDir = when (baseType) {
@@ -387,13 +391,15 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         return itemRowPanel
     }
 
-    private fun parseTargetText(text: String): Pair<String, String?> {
-        val parts = text.split(":", limit = 2)
-        val rightPart = if (parts.size > 1) parts[1].trim() else parts[0].trim()
+    private fun parseTargetText(text: String): Triple<String?, String, String?> {
+        val modulePart = if (text.contains(":")) text.substringBefore(":").trim() else null
+        val rightPart = if (text.contains(":")) text.substringAfter(":").trim() else text.trim()
+        
         val typeSubParts = rightPart.split(".", limit = 2)
         val baseType = typeSubParts[0]
         val subPath = if (typeSubParts.size > 1) typeSubParts[1] else null
-        return baseType to subPath
+        
+        return Triple(modulePart, baseType, subPath)
     }
 
     private fun createStep2Panel(): JPanel {
@@ -493,46 +499,67 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                 }
             }
         })
-        
-        targetBox.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {
+
+        editor.addFocusListener(object : java.awt.event.FocusAdapter() {
+            override fun focusLost(e: java.awt.event.FocusEvent?) {
                 if (isFiltering) return
                 val text = editor.text
-                isFiltering = true
-                val currentSelected = targetBox.selectedItem
-                targetBox.removeAllItems()
-                allTargetOptions.forEach { targetBox.addItem(it) }
-                targetBox.selectedItem = currentSelected
-                editor.text = text
-                isFiltering = false
+                if (text.isNotEmpty()) {
+                    val match = allTargetOptions.find { it.toString() == text }
+                    if (match != null) {
+                        isFiltering = true
+                        targetBox.selectedItem = match
+                        isFiltering = false
+                    }
+                }
             }
-            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {}
-            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
         })
 
-        editor.addActionListener {
-            targetBox.hidePopup()
-            val text = editor.text
-            val match = allTargetOptions.find { it.toString() == text }
-            if (match != null) {
-                isFiltering = true
-                targetBox.selectedItem = match
-                isFiltering = false
-                lastSelectedTarget = match
-                refreshStep2()
+        editor.addKeyListener(object : java.awt.event.KeyAdapter() {
+            override fun keyPressed(e: java.awt.event.KeyEvent) {
+                if (e.keyCode == java.awt.event.KeyEvent.VK_ENTER) {
+                    e.consume() // Prevent dialog submission
+                    targetBox.hidePopup()
+                    val text = editor.text
+                    val match = allTargetOptions.find { it.toString() == text } ?: if (targetBox.itemCount > 0) targetBox.getItemAt(0) else null
+                    if (match != null) {
+                        isFiltering = true
+                        targetBox.selectedItem = match
+                        editor.text = match.toString()
+                        isFiltering = false
+                        if (match != lastSelectedTarget) {
+                            lastSelectedTarget = match
+                            refreshStep2()
+                        }
+                    }
+                }
             }
-        }
+        })
+        
+        targetBox.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
+            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {}
+            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {
+                SwingUtilities.invokeLater {
+                    isFiltering = true
+                    val currentSelected = targetBox.selectedItem
+                    val text = editor.text
+                    targetBox.removeAllItems()
+                    allTargetOptions.forEach { targetBox.addItem(it) }
+                    targetBox.selectedItem = currentSelected
+                    editor.text = text
+                    isFiltering = false
+                }
+            }
+            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
+        })
 
         updateTargetBox()
 
         targetBox.addActionListener {
             if (!isFiltering) {
                 val selected = targetBox.selectedItem as? TargetOption
-                val text = editor.text
-                val finalSelection = selected ?: allTargetOptions.find { it.toString() == text }
-                
-                if (finalSelection != null && finalSelection != lastSelectedTarget) {
-                    lastSelectedTarget = finalSelection
+                if (selected != null && selected != lastSelectedTarget) {
+                    lastSelectedTarget = selected
                     refreshStep2()
                 }
             }
@@ -616,10 +643,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
     private fun performImport() {
         val editorText = (targetBox.editor.editorComponent as JTextField).text
-        val (baseType, subPath) = parseTargetText(editorText)
-        
-        val selectedTarget = targetBox.selectedItem as? TargetOption
-        if (selectedTarget == null && baseType.isEmpty()) return
+        val (moduleName, baseType, subPath) = parseTargetText(editorText)
         
         val itemsToImport = importedItems.filter { !it.doNotImport }
         if (itemsToImport.isEmpty()) return
@@ -629,8 +653,14 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                 indicator.isIndeterminate = false
                 
                 try {
-                    val resDir = selectedTarget?.file ?: ResourceUtils.getOrCreateResourceDir(selectedTarget?.module, project, baseType)
-                        ?: throw IOException("Could not find or create resource directory")
+                    val module = if (moduleName != null) {
+                        ModuleManager.getInstance(project).modules.find { 
+                            with(ResourceUtils) { it.name.cleanModuleName() } == moduleName || it.name == moduleName
+                        }
+                    } else null
+
+                    val resDir = ResourceUtils.getOrCreateResourceDir(module, project, baseType)
+                        ?: throw IOException("Could not find or create resource directory for '$baseType'")
 
                     itemsToImport.forEachIndexed { index, item ->
                         indicator.checkCanceled()
@@ -641,7 +671,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                             val folderBase = if (subPath != null) subPath.replace(".", "/") else "drawable"
                             val densityDirName = when (baseType) {
                                 "Android", "Compose" -> "${folderBase}${item.density.directoryQualifier}"
-                                else -> folderBase
+                                else -> if (subPath != null) subPath.replace(".", "/") else ""
                             }
                             
                             val targetDir = if (densityDirName.isNotEmpty()) {

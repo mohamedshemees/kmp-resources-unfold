@@ -232,6 +232,21 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
         })
 
+        editor.addFocusListener(object : java.awt.event.FocusAdapter() {
+            override fun focusLost(e: java.awt.event.FocusEvent?) {
+                if (isFiltering) return
+                val text = editor.text
+                if (text.isNotEmpty()) {
+                    val match = allModuleOptions.find { it.displayName == text }
+                    if (match != null) {
+                        isFiltering = true
+                        moduleBox.selectedItem = match
+                        isFiltering = false
+                    }
+                }
+            }
+        })
+
         editor.addActionListener {
             moduleBox.hidePopup()
             val text = editor.text

@@ -83,10 +83,11 @@ object ResourceUtils {
                 if (androidMain != null) "src/androidMain/${ResourceConstants.ANDROID_RES_DIR}" else "src/main/${ResourceConstants.ANDROID_RES_DIR}"
             }
             "Assets" -> "assets"
-            else -> {
+            "Compose" -> {
                 val commonMain = com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "commonMain")
                 if (commonMain != null) "src/commonMain/${ResourceConstants.COMPOSE_RESOURCES_DIR}" else ResourceConstants.COMPOSE_RESOURCES_DIR
             }
+            else -> targetType // Treat as direct relative path
         }
         
         var result: VirtualFile? = null
