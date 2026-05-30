@@ -6,9 +6,27 @@
 
 ## [2.2.0]
 ### Added
-- **Hierarchical Density Grouping**: Resources are now grouped by name with density variations (HDPI, XHDPI, etc.) listed as indented sub-items.
-- **Native Android Support**: Full support for native Android `res` packages alongside Compose Multiplatform `composeResources`.
-- **Improved Import Dialog**: Enhanced module discovery and live path previews for both KMP and Android modules.
+- **Hierarchical Density Grouping**: Resources are now grouped by base name with density variations (HDPI, XHDPI, etc.) listed as indented sub-items. Functional parent rows now open the default density version.
+- **Native Android & Flutter Support**: 
+    - Full support for native Android `res` directories (`src/main/res`) alongside Compose Multiplatform.
+    - Flutter project support: automatically lists all root directories as import targets when `pubspec.yaml` is detected.
+    - Support for generic `assets/` and `images/` directories project-wide.
+- **Import Dialog UX Overhaul**:
+    - **Integrated Search**: Searchable ComboBoxes with real-time filtering for module and target selection.
+    - **Physical Enter Support**: Pressing Enter confirms selections and refreshes previews without auto-submitting the dialog.
+    - **Custom Sub-paths**: Create and target custom sub-directories via dot notation (e.g., `assets.icons.buttons`).
+    - **Stability Fix**: Import operations now run on a background thread with progress indicators, preventing IDE freezes during large imports.
+- **Multi-Instance Figma Bridge**: 
+    - Support for multiple ports (6789-6795) to allow concurrent plugin instances in different projects.
+    - Integrated relaunch button and port selection UI directly in the tool window.
+- **IDE File Tree Previews**: Tiny thumbnail previews directly in the standard IntelliJ Project View for all supported image and vector formats.
+- **Kotlin Resource Linting**: New inspection for `Res.string.key` references in Kotlin code to detect and highlight missing translations in real-time.
+
+### Fixed
+- **Module Naming**: Automatic cleaning of redundant `mena.` prefixes from module display names across the UI.
+- **Strict Resource Detection**: Refined module filtering to only show valid resource-containing modules in dropdowns, reducing clutter.
+- **Focus Persistence**: Fixed an issue where ComboBox text would disappear on focus loss.
+- **Inspection Compliance**: Added mandatory descriptions to all lints to satisfy IntelliJ internal standards.
 
 ## [2.1.0]
 ### Added
