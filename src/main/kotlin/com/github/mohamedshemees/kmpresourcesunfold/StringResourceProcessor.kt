@@ -2,8 +2,8 @@ package com.github.mohamedshemees.kmpresourcesunfold
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.PsiManager
+import com.intellij.psi.xml.XmlFile
 
 data class StringResource(
     val key: String,

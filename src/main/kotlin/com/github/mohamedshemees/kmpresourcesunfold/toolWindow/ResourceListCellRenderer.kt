@@ -1,11 +1,17 @@
 package com.github.mohamedshemees.kmpresourcesunfold.toolWindow
 
-import com.github.mohamedshemees.kmpresourcesunfold.*
+import com.github.mohamedshemees.kmpresourcesunfold.MyBundle
+import com.github.mohamedshemees.kmpresourcesunfold.ResourceIconProvider
+import com.github.mohamedshemees.kmpresourcesunfold.ResourceUtils
+import com.github.mohamedshemees.kmpresourcesunfold.StringResource
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
-import java.awt.*
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Font
+import java.awt.GridLayout
 import javax.swing.*
 
 class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<Any> {

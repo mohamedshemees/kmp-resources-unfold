@@ -2,7 +2,6 @@ package com.github.mohamedshemees.kmpresourcesunfold.navigation
 
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceConstants
 import com.github.mohamedshemees.kmpresourcesunfold.StringResourceProcessor
-import com.intellij.navigation.ItemPresentation
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.*
@@ -11,7 +10,6 @@ import com.intellij.psi.xml.XmlAttributeValue
 import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.xml.XmlTag
 import com.intellij.util.ProcessingContext
-import javax.swing.Icon
 
 class ResourceKeyReferenceContributor : PsiReferenceContributor() {
     override fun registerReferenceProviders(registrar: PsiReferenceRegistrar) {
