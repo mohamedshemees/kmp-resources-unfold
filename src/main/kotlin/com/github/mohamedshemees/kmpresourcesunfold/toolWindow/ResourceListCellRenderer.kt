@@ -86,6 +86,7 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.text = value.name
                 label.icon = ResourceIconProvider.getIcon(value)
                 label.font = label.font.deriveFont(Font.BOLD, 12f)
+
                 
                 val moduleName = (ModuleUtilCore.findModuleForFile(value, project)?.name ?: "Unknown").let {
                     with(ResourceUtils) { it.cleanModuleName() }

@@ -3,8 +3,6 @@ package com.github.mohamedshemees.kmpresourcesunfold
 import com.android.ide.common.vectordrawable.VdPreview
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
-import com.intellij.util.ImageLoader
-import com.intellij.util.ui.ImageUtil
 import java.awt.Component
 import java.awt.Graphics
 import java.awt.Graphics2D
@@ -35,7 +33,6 @@ object ResourceIconProvider {
     }
 
     class CheckerboardIcon(private val icon: Icon, private val width: Int, private val height: Int) : Icon {
-        constructor(icon: Icon, size: Int) : this(icon, size, size)
 
         override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
             val g2 = g.create() as Graphics2D

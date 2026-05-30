@@ -392,10 +392,11 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     val sortedFiles = files.sortedWith(compareBy({ getDensity(it).let { d -> densityOrder.indexOf(d).takeIf { i -> i >= 0 } ?: 100 } }, { it.name }))
                     
                     val representative = sortedFiles.find { getDensity(it) == "Default" } ?: sortedFiles.first()
-                    
+
                     resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative))
-                    
+
                     sortedFiles.forEach { file ->
+
                         resourceModel.addElement(ResourceChild(file, getDensity(file)))
                     }
                 }

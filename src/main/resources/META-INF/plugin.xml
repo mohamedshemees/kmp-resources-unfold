@@ -32,5 +32,7 @@
                          enabledByDefault="true"
                          level="WARNING"
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.MissingTranslationInspection"/>
+
+        <iconProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.ResourceFileIconProvider" order="first"/>
     </extensions>
 </idea-plugin>
