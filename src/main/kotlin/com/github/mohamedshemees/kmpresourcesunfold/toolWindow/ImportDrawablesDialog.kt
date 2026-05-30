@@ -457,13 +457,13 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
             modules.forEach { module ->
                 val existingTargets = ResourceUtils.getAllResourceDirs(module, project)
+                existingTargets.forEach { (type, file) ->
+                    optionsList.add(TargetOption(module, type, file))
+                }
                 
-                optionsList.add(TargetOption(module, "Compose", existingTargets.find { it.first == "Compose" }?.second))
-                optionsList.add(TargetOption(module, "Android", existingTargets.find { it.first == "Android" }?.second))
-                
-                val existingAssets = com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
+                com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
                     .firstNotNullOfOrNull { com.intellij.openapi.vfs.VfsUtil.findRelativeFile(it, "assets") }
-                optionsList.add(TargetOption(module, "Assets", existingAssets))
+                    ?.let { optionsList.add(TargetOption(module, "Assets", it)) }
             }
         }
         
@@ -661,47 +661,38 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                         }
                     } else null
 
-                    val resDir = ResourceUtils.getOrCreateResourceDir(module, project, baseType)
+                    val resDirVirtual = ResourceUtils.getOrCreateResourceDir(module, project, baseType)
                         ?: throw IOException("Could not find or create resource directory for '$baseType'")
+                    
+                    val resDirPath = resDirVirtual.path
 
                     itemsToImport.forEachIndexed { index, item ->
                         indicator.checkCanceled()
                         indicator.fraction = index.toDouble() / itemsToImport.size
                         indicator.text = "Importing ${item.name}..."
 
-                        WriteCommandAction.runWriteCommandAction(project) {
-                            val folderBase = if (subPath != null) subPath.replace(".", "/") else "drawable"
-                            val densityDirName = when (baseType) {
-                                "Android", "Compose" -> "${folderBase}${item.density.directoryQualifier}"
-                                else -> if (subPath != null) subPath.replace(".", "/") else ""
-                            }
-                            
-                            val targetDir = if (densityDirName.isNotEmpty()) {
-                                VfsUtil.createDirectoryIfMissing(resDir, densityDirName) ?: return@runWriteCommandAction
-                            } else {
-                                resDir
-                            }
+                        val folderBase = subPath?.replace(".", "/") ?: "drawable"
+                        val densityDirName = when (baseType) {
+                            "Android", "Compose" -> "${folderBase}${item.density.directoryQualifier}"
+                            else -> subPath?.replace(".", "/") ?: ""
+                        }
 
-                            if (item.convertSvg) {
-                                val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
-                                val newFileName = "${item.name}.xml"
-                                val existingFile = targetDir.findChild(newFileName)
-                                val newFile = existingFile ?: targetDir.createChildData(this, newFileName)
-                                VfsUtil.saveText(newFile, xmlContent)
-                            } else {
-                                val newFileName = "${item.name}.${item.file.extension}"
-                                val existingFile = targetDir.findChild(newFileName)
-                                if (existingFile != null) {
-                                    existingFile.setBinaryContent(item.file.contentsToByteArray())
-                                } else {
-                                    val copied = VfsUtil.copy(this, item.file, targetDir)
-                                    copied.rename(this, newFileName)
-                                }
-                            }
+                        val targetFolder = if (densityDirName.isNotEmpty()) java.io.File(resDirPath, densityDirName) else java.io.File(resDirPath)
+                        if (!targetFolder.exists()) {
+                            targetFolder.mkdirs()
+                        }
+
+                        if (item.convertSvg) {
+                            val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
+                            val targetFile = java.io.File(targetFolder, "${item.name}.xml")
+                            targetFile.writeText(xmlContent)
+                        } else {
+                            val targetFile = java.io.File(targetFolder, "${item.name}.${item.file.extension}")
+                            targetFile.writeBytes(item.file.contentsToByteArray())
                         }
                     }
                     
-                    VfsUtil.markDirtyAndRefresh(true, true, true, resDir)
+                    VfsUtil.markDirtyAndRefresh(true, true, true, resDirVirtual)
                 } catch (e: Exception) {
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))

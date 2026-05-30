@@ -19,7 +19,6 @@ class KotlinMissingTranslationInspection : LocalInspectionTool() {
             override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) {
                 super.visitDotQualifiedExpression(expression)
 
-                // Looking for Res.string.key
                 val text = expression.text
                 if (text.startsWith("Res.string.")) {
                     val key = text.substringAfter("Res.string.")

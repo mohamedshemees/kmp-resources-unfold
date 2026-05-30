@@ -61,7 +61,6 @@ data class ImportedDrawableItem(
             else -> "img_"
         }
         
-        // Remove existing prefix if present to normalize
         val currentName = if (name.startsWith("ic_") || name.startsWith("img_")) {
             name.substringAfter("_")
         } else {

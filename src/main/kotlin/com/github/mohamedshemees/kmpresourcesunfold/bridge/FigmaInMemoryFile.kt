@@ -5,10 +5,6 @@ import com.intellij.testFramework.BinaryLightVirtualFile
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 
-/**
- * A VirtualFile implementation that stays in memory.
- * Used for pre-loading images from Figma before they are actually saved to disk.
- */
 class FigmaInMemoryFile(
     fileName: String,
     private val content: ByteArray
