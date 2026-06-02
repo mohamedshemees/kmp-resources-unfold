@@ -40,5 +40,10 @@
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.KotlinMissingTranslationInspection"/>
 
         <iconProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.ResourceFileIconProvider" order="first"/>
+
+        <codeInsight.lineMarkerProvider language="kotlin"
+                                        implementationClass="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourcePreviewLineMarkerProvider"/>
+
+        <platform.backend.documentation.targetProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourceDocumentationTargetProvider"/>
     </extensions>
 </idea-plugin>

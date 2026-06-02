@@ -37,9 +37,10 @@ object ResourceIconProvider {
         override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
             val g2 = g.create() as Graphics2D
             try {
-                val squareSize = 8
-                val light = JBColor(0xEEEEEE, 0x3C3F41)
-                val dark = JBColor(0xDDDDDD, 0x313335)
+                // Adjust square size based on icon size: 4px for small icons, 8px for large ones
+                val squareSize = if (width <= 32) 4 else 8
+                val light = JBColor(0xFFFFFF, 0x45494A)
+                val dark = JBColor(0xCBCBCB, 0x313335)
 
                 for (i in 0 until width step squareSize) {
                     for (j in 0 until height step squareSize) {
@@ -98,5 +99,46 @@ object ResourceIconProvider {
         val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
         val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
         return img?.let { ImageIcon(it) }
+    }
+
+    fun getIconAsHtml(file: VirtualFile, size: Int): String? {
+        try {
+            val ext = ResourceExtension.fromExtension(file.extension) ?: return null
+            val bufferedImage = when (ext) {
+                ResourceExtension.PNG, ResourceExtension.JPG, ResourceExtension.JPEG, ResourceExtension.WEBP -> {
+                    file.inputStream.use { ImageIO.read(it) }
+                }
+                ResourceExtension.SVG -> {
+                    val xmlContent = SvgToXmlConverter.convertToXml(file.inputStream)
+                    val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
+                    VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
+                }
+                ResourceExtension.XML -> {
+                    val xmlContent = String(file.contentsToByteArray(), Charsets.UTF_8)
+                    if (xmlContent.contains(ResourceConstants.VECTOR_TAG)) {
+                        val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
+                        VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
+                    } else null
+                }
+            } ?: return null
+
+            val scaled = if (bufferedImage.width > size || bufferedImage.height > size) {
+                val scale = size.toDouble() / maxOf(bufferedImage.width, bufferedImage.height)
+                val w = (bufferedImage.width * scale).toInt()
+                val h = (bufferedImage.height * scale).toInt()
+                val res = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+                val g = res.createGraphics()
+                g.drawImage(bufferedImage, 0, 0, w, h, null)
+                g.dispose()
+                res
+            } else bufferedImage
+
+            val baos = java.io.ByteArrayOutputStream()
+            ImageIO.write(scaled, "png", baos)
+            val base64 = java.util.Base64.getEncoder().encodeToString(baos.toByteArray())
+            return "<img src=\"data:image/png;base64,$base64\" width=\"${scaled.width}\" height=\"${scaled.height}\">"
+        } catch (e: Exception) {
+            return null
+        }
     }
 }
