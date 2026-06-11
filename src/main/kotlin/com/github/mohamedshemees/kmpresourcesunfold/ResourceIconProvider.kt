@@ -39,8 +39,8 @@ object ResourceIconProvider {
             try {
                 // Adjust square size based on icon size: 4px for small icons, 8px for large ones
                 val squareSize = if (width <= 32) 4 else 8
-                val light = JBColor(0xFFFFFF, 0xFFFFFF)
-                val dark = JBColor(0xC0C0C0, 0xC0C0C0)
+                val light = JBColor(0x414243, 0x414243)
+                val dark = JBColor(0x393A3B, 0x393A3B)
 
                 for (i in 0 until width step squareSize) {
                     for (j in 0 until height step squareSize) {
