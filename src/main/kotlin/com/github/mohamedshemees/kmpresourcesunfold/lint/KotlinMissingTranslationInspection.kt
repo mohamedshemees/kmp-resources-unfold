@@ -24,7 +24,12 @@ class KotlinMissingTranslationInspection : LocalInspectionTool() {
                     if (key.isEmpty() || key.contains(".")) return
 
                     val project = expression.project
-                    val missingIn = StringResourceProcessor.getMissingTranslationsByKey(project, key)
+                    val module = com.intellij.openapi.module.ModuleUtilCore.findModuleForPsiElement(expression)
+                    val missingIn = if (module != null) {
+                        StringResourceProcessor.getMissingTranslationsForModule(module, key)
+                    } else {
+                        StringResourceProcessor.getMissingTranslationsByKey(project, key)
+                    }
 
                     if (missingIn.isNotEmpty()) {
                         holder.registerProblem(

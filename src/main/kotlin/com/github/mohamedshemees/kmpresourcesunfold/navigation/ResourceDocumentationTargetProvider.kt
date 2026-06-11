@@ -13,42 +13,48 @@ class ResourceDocumentationTargetProvider : DocumentationTargetProvider {
 
     override fun documentationTargets(file: PsiFile, offset: Int): List<DocumentationTarget> {
         val element = file.findElementAt(offset) ?: return emptyList()
-        val key = getResourceKey(element) ?: return emptyList()
+        val module = com.intellij.openapi.module.ModuleUtilCore.findModuleForPsiElement(file)
         
-        return listOf(ResourceDocumentationTarget(key, file.project))
+        // 1. Check for Drawables
+        val drawableKey = getResourceKey(element, "Res.drawable.")
+        if (drawableKey != null) {
+            return listOf(ResourceDocumentationTarget(drawableKey, file.project, ResourceDocumentationTarget.ResourceType.DRAWABLE, module))
+        }
+
+        // 2. Check for Strings
+        val stringKey = getResourceKey(element, "Res.string.")
+        if (stringKey != null) {
+            return listOf(ResourceDocumentationTarget(stringKey, file.project, ResourceDocumentationTarget.ResourceType.STRING, module))
+        }
+        
+        return emptyList()
     }
 
-    private fun getResourceKey(element: PsiElement?): String? {
+    private fun getResourceKey(element: PsiElement?, prefix: String): String? {
         if (element == null) return null
         
         var current: PsiElement? = element
         while (current != null && current !is PsiFile) {
             val text = current.text
             
-            // Handle usages like Res.drawable.male
             if (current is KtDotQualifiedExpression) {
-                if (text.contains("Res.drawable.")) {
-                    val key = text.substringAfter("Res.drawable.").substringBefore(".")
-                    if (key.isNotEmpty() && key != "drawable") return key
+                if (text.contains(prefix)) {
+                    val key = text.substringAfter(prefix).substringBefore(".")
+                    if (key.isNotEmpty() && key != prefix.substringBeforeLast(".").substringAfterLast(".")) return key
                 }
             }
             
-            // Handle leaf reference expressions
             if (current is KtNameReferenceExpression) {
-                val parent = current.parent
-                if (parent is KtDotQualifiedExpression && parent.text.contains("Res.drawable.")) {
-                    val fullText = parent.text
-                    val key = fullText.substringAfter("Res.drawable.").substringBefore(".")
-                    if (key.isNotEmpty() && key != "drawable") return key
+                val p = current.parent
+                if (p is KtDotQualifiedExpression && p.text.contains(prefix)) {
+                    val key = p.text.substringAfter(prefix).substringBefore(".")
+                    if (key.isNotEmpty()) return key
                 }
             }
 
-            // Handle property declarations
             if (current is KtProperty) {
-                val fqName = current.fqName?.asString() ?: ""
-                if (fqName.contains("Res.drawable") || text.startsWith("internal val Res.drawable.")) {
-                    val key = text.substringAfter("Res.drawable.").substringBefore(":").substringBefore("=").trim()
-                    if (key.isNotEmpty() && key != "drawable") return key
+                if (text.startsWith("internal val $prefix")) {
+                    return text.substringAfter(prefix).substringBefore(":").substringBefore("=").trim()
                 }
             }
             current = current.parent
