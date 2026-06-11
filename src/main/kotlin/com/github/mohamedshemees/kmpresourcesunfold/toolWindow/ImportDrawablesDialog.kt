@@ -360,7 +360,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(infoLabel)
 
-            if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+            if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension && !ResourceUtils.isFlutterProject(project)) {
                 val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
                     isOpaque = false
                     font = JBUI.Fonts.smallFont()
@@ -371,6 +371,8 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     }
                 }
                 infoPanel.add(convertCheckbox)
+            } else if (ResourceUtils.isFlutterProject(project)) {
+                item.convertSvg = false
             }
         }
 
