@@ -32,23 +32,25 @@ object ResourceIconProvider {
         }
     }
 
+    private fun drawCheckerboard(g2: Graphics2D, width: Int, height: Int, x: Int = 0, y: Int = 0) {
+        val squareSize = if (width <= 32) 4 else 8
+        val light = java.awt.Color(0x414243)
+        val dark = java.awt.Color(0x393A3B)
+
+        for (i in 0 until width step squareSize) {
+            for (j in 0 until height step squareSize) {
+                g2.color = if ((i / squareSize + j / squareSize) % 2 == 0) light else dark
+                g2.fillRect(x + i, y + j, minOf(squareSize, width - i), minOf(squareSize, height - j))
+            }
+        }
+    }
+
     class CheckerboardIcon(private val icon: Icon, private val width: Int, private val height: Int) : Icon {
 
         override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
             val g2 = g.create() as Graphics2D
             try {
-                // Adjust square size based on icon size: 4px for small icons, 8px for large ones
-                val squareSize = if (width <= 32) 4 else 8
-                val light = JBColor(0x414243, 0x414243)
-                val dark = JBColor(0x393A3B, 0x393A3B)
-
-                for (i in 0 until width step squareSize) {
-                    for (j in 0 until height step squareSize) {
-                        g2.color = if ((i / squareSize + j / squareSize) % 2 == 0) light else dark
-                        g2.fillRect(x + i, y + j, minOf(squareSize, width - i), minOf(squareSize, height - j))
-                    }
-                }
-
+                drawCheckerboard(g2, width, height, x, y)
                 val iconX = x + (width - icon.iconWidth) / 2
                 val iconY = y + (height - icon.iconHeight) / 2
                 icon.paintIcon(c, g2, iconX, iconY)
@@ -122,21 +124,26 @@ object ResourceIconProvider {
                 }
             } ?: return null
 
-            val scaled = if (bufferedImage.width > size || bufferedImage.height > size) {
-                val scale = size.toDouble() / maxOf(bufferedImage.width, bufferedImage.height)
-                val w = (bufferedImage.width * scale).toInt()
-                val h = (bufferedImage.height * scale).toInt()
-                val res = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
-                val g = res.createGraphics()
+            val scale = if (bufferedImage.width > size || bufferedImage.height > size) {
+                size.toDouble() / maxOf(bufferedImage.width, bufferedImage.height)
+            } else 1.0
+
+            val w = (bufferedImage.width * scale).toInt()
+            val h = (bufferedImage.height * scale).toInt()
+            
+            val res = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+            val g = res.createGraphics()
+            try {
+                drawCheckerboard(g, w, h)
                 g.drawImage(bufferedImage, 0, 0, w, h, null)
+            } finally {
                 g.dispose()
-                res
-            } else bufferedImage
+            }
 
             val baos = java.io.ByteArrayOutputStream()
-            ImageIO.write(scaled, "png", baos)
+            ImageIO.write(res, "png", baos)
             val base64 = java.util.Base64.getEncoder().encodeToString(baos.toByteArray())
-            return "<img src=\"data:image/png;base64,$base64\" width=\"${scaled.width}\" height=\"${scaled.height}\">"
+            return "<img src=\"data:image/png;base64,$base64\" width=\"$w\" height=\"$h\">"
         } catch (e: Exception) {
             return null
         }
