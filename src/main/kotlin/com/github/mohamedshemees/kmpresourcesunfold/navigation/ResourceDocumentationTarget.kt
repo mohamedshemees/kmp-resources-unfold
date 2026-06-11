@@ -32,7 +32,7 @@ class ResourceDocumentationTarget(
         val html = """
             <div style="font-family: sans-serif; padding: 10px;">
                 <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px; color: #569CD6;">$key</div>
-                <div style="background-color: #80808022; border: 1px solid #80808044; display: inline-block; padding: 10px; border-radius: 4px;">
+                <div style="display: inline-block;">
                     $imageHtml
                 </div>
                 <div style="margin-top: 12px; color: #808080; font-size: 12px; line-height: 1.5;">
