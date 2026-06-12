@@ -38,7 +38,13 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         CHOOSE_TARGET("ChooseImportLocationStep")
     }
 
-    private val importedItems = initialFiles.map { ImportedDrawableItem(it) }.toMutableList()
+    private val importedItems = initialFiles.map { 
+        ImportedDrawableItem(it).apply {
+            if (ResourceUtils.isFlutterProject(project)) {
+                convertSvg = false
+            }
+        }
+    }.toMutableList()
     private var currentStep = ImportStep.SELECT_RESOURCES
     private var applyPrefix = false
     private val mainPanel = JPanel(CardLayout())
@@ -351,9 +357,8 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(densityBox)
 
-            val ext  = if (item.convertSvg) "xml" else item.file.extension ?: ""
             val size = ResourceUtils.formatSize(item.file.length)
-            val infoLabel = JBLabel(MyBundle.message("label.itemInfo", "", size, ext)).apply {
+            val infoLabel = JBLabel(MyBundle.message("label.itemInfo", "", size, item.extension)).apply {
                 foreground   = UIUtil.getLabelDisabledForeground()
                 font         = JBUI.Fonts.smallFont()
                 alignmentX   = Component.LEFT_ALIGNMENT

@@ -86,12 +86,15 @@ object StringResourceProcessor {
     }
 
     fun getDefaultStringResourceFileForModule(module: com.intellij.openapi.module.Module, key: String): VirtualFile? {
+        val project = module.project
+        val scope = com.intellij.psi.search.GlobalSearchScope.moduleWithDependenciesScope(module)
         val stringFiles = com.intellij.psi.search.FilenameIndex.getVirtualFilesByName(
             ResourceConstants.STRINGS_FILE,
-            com.intellij.psi.search.GlobalSearchScope.moduleScope(module)
+            scope
         )
+        
         return stringFiles.filter { it.parent.name == ResourceConstants.VALUES_DIR }.find { file ->
-            parseStrings(module.project, file).containsKey(key)
+            parseStrings(project, file).containsKey(key)
         }
     }
 
