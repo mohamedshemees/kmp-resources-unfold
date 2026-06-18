@@ -6,9 +6,11 @@
 
 ## [2.3.0]
 ### Added
-- **Strict Module Scoping**: String resource resolution is now strictly scoped to the active module and its direct dependencies (e.g., `commonMain`), eliminating misleading "missing" or "translated" reports from unrelated modules.
+- **Inline Resource Previews**: Introduced high-fidelity documentation hovers and gutter actions to keep you in the flow:
+    - **Instant Hovers**: Simply hover over `Res.drawable.your_drawable` or `Res.string.your_string` in your code to instantly see the image or localized translations directly in the editor.
+    - **Gutter Previews & Swap**: View drawable previews directly from the gutter panel. Click to instantly search and seamlessly swap resources on the fly.
+- **Strict Module Scoping**: String resource resolution is now strictly scoped to the active module and its direct dependencies (e.g., `commonMain`), ensuring previews and "missing" reports are contextually accurate.
 - **Flutter SVG Preservation**: Optimized image imports for Flutter projects; SVGs are now kept in their original format with automatic disabling of XML conversion.
-- **Polished Hover Previews**: Refined image documentation popups by removing redundant styling and applying high-contrast checkerboard backgrounds using custom colors (#414243 & #393A3B).
 
 ### Fixed
 - **Flutter UI Accuracy**: Corrected file extension labels in the Import Dialog to accurately show `.svg` for Flutter projects.
