@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [2.3.0]
+### Added
+- **Strict Module Scoping**: String resource resolution is now strictly scoped to the active module and its direct dependencies (e.g., `commonMain`), eliminating misleading "missing" or "translated" reports from unrelated modules.
+- **Flutter SVG Preservation**: Optimized image imports for Flutter projects; SVGs are now kept in their original format with automatic disabling of XML conversion.
+- **Polished Hover Previews**: Refined image documentation popups by removing redundant styling and applying high-contrast checkerboard backgrounds using custom colors (#414243 & #393A3B).
+
+### Fixed
+- **Flutter UI Accuracy**: Corrected file extension labels in the Import Dialog to accurately show `.svg` for Flutter projects.
+- **Documentation Reliability**: Synchronized missing translation logic with value retrieval to guarantee consistent reports in editor hovers.
+
 ## [2.2.0]
 ### Added
 - **Hierarchical Density Grouping**: Resources are now grouped by base name with density variations (HDPI, XHDPI, etc.) listed as indented sub-items. Functional parent rows now open the default density version.
