@@ -1,7 +1,7 @@
 [versions]
 # plugins
 changelog = "2.5.0"
-intelliJPlatform = "2.14.0"
+intelliJPlatform = "2.17.0"
 kotlin = "2.3.20"
 
 [libraries]
