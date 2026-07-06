@@ -42,7 +42,8 @@ data class ImportedDrawableItem(
     val file: VirtualFile,
     private val originalName: String = file.nameWithoutExtension,
     var doNotImport: Boolean = false,
-    var convertSvg: Boolean = file.extension?.lowercase() == ResourceExtension.SVG.extension
+    var convertSvg: Boolean = file.extension?.lowercase() == ResourceExtension.SVG.extension,
+    var isSelected: Boolean = true
 ) {
     private val densityData = Density.fromFileName(originalName)
     val detectedDensity: Density = densityData.first
@@ -51,26 +52,40 @@ data class ImportedDrawableItem(
 
     var name: String = baseName
     val suffix: String = if (originalName.length > baseName.length) originalName.substring(baseName.length) else ""
+    var customPrefixApplied: String = ""
 
     val extension: String
         get() = if (convertSvg) "xml" else file.extension ?: ""
 
     fun applyPrefix(enabled: Boolean) {
-        val prefix = when (file.extension?.lowercase()) {
+        val stdPrefix = when (file.extension?.lowercase()) {
             ResourceExtension.SVG.extension, ResourceExtension.XML.extension -> "ic_"
             else -> "img_"
         }
         
-        val currentName = if (name.startsWith("ic_") || name.startsWith("img_")) {
-            name.substringAfter("_")
-        } else {
-            name
-        }
+        val hasStdPrefix = name.startsWith("ic_") || name.startsWith("img_")
+        val restOfName = if (hasStdPrefix) name.substringAfter("_") else name
 
         name = if (enabled) {
-            "${prefix}${currentName}"
+            "${stdPrefix}${restOfName}"
         } else {
-            currentName
+            restOfName
         }
+    }
+
+    fun applyCustomPrefix(customPrefix: String) {
+        val hasStdPrefix = name.startsWith("ic_") || name.startsWith("img_")
+        val stdPrefix = if (hasStdPrefix) name.substringBefore("_") + "_" else ""
+        
+        var restOfName = if (hasStdPrefix) name.substringAfter("_") else name
+        
+        if (customPrefixApplied.isNotEmpty() && restOfName.startsWith(customPrefixApplied)) {
+            restOfName = restOfName.substring(customPrefixApplied.length)
+        }
+        
+        restOfName = "${customPrefix}${restOfName}"
+        customPrefixApplied = customPrefix
+        
+        name = "${stdPrefix}${restOfName}"
     }
 }

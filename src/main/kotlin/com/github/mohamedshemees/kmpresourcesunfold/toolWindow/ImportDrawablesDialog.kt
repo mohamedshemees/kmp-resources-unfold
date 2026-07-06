@@ -101,47 +101,103 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
     private fun createStep1Panel(): JPanel {
         val panel = JPanel(BorderLayout())
         
-        val header = JPanel(BorderLayout()).apply {
+        val header = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(10, 10, 5, 10)
             
-            val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { isOpaque = false }
-            val countLabel = JBLabel().apply {
-                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
-            }
-            leftPanel.add(countLabel)
-            
-            val prefixCheckbox = JCheckBox(MyBundle.message("prompt.applyPrefix"), applyPrefix).apply {
+            val row1 = JPanel(BorderLayout()).apply {
                 isOpaque = false
-                border = JBUI.Borders.emptyLeft(20)
-                addActionListener {
-                    applyPrefix = isSelected
-                    importedItems.forEach { it.applyPrefix(applyPrefix) }
-                    refreshStep1(panel)
+                val countLabel = JBLabel().apply {
+                    font = JBUI.Fonts.label().deriveFont(Font.BOLD)
                 }
-            }
-            leftPanel.add(prefixCheckbox)
-            add(leftPanel, BorderLayout.WEST)
-            
-            val importMore = JButton(MyBundle.message("button.importMore")).apply {
-                putClientProperty("JButton.buttonType", "link")
-                addActionListener {
-                    val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
-                    descriptor.withFileFilter { file ->
-                        val ext = file.extension?.lowercase()
-                        ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "webp" || ext == "svg" || ext == "xml"
-                    }
-                    descriptor.title = MyBundle.message("title.selectImages")
-
-                    val files = FileChooser.chooseFiles(descriptor, project, null)
-                    files.forEach { file ->
-                        if (importedItems.none { it.file == file }) {
-                            importedItems.add(ImportedDrawableItem(file).apply { applyPrefix(applyPrefix) })
+                add(countLabel, BorderLayout.WEST)
+                
+                val rightActionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 10, 0)).apply {
+                    isOpaque = false
+                    
+                    val deleteSelected = JButton(MyBundle.message("button.removeSelected"), AllIcons.General.Remove).apply {
+                        putClientProperty("JButton.buttonType", "link")
+                        addActionListener {
+                            val selectedItems = importedItems.filter { it.isSelected }
+                            if (selectedItems.isNotEmpty()) {
+                                importedItems.removeAll(selectedItems)
+                                refreshStep1(panel)
+                            }
                         }
                     }
-                    refreshStep1(panel)
+                    add(deleteSelected)
+                    
+                    val importMore = JButton(MyBundle.message("button.importMore")).apply {
+                        putClientProperty("JButton.buttonType", "link")
+                        addActionListener {
+                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
+                            descriptor.withFileFilter { file ->
+                                val ext = file.extension?.lowercase()
+                                ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "webp" || ext == "svg" || ext == "xml"
+                            }
+                            descriptor.title = MyBundle.message("title.selectImages")
+
+                            val files = FileChooser.chooseFiles(descriptor, project, null)
+                            files.forEach { file ->
+                                if (importedItems.none { it.file == file }) {
+                                    importedItems.add(ImportedDrawableItem(file).apply { applyPrefix(applyPrefix) })
+                                }
+                            }
+                            refreshStep1(panel)
+                        }
+                    }
+                    add(importMore)
                 }
+                add(rightActionsPanel, BorderLayout.EAST)
             }
-            add(importMore, BorderLayout.EAST)
+            add(row1)
+            add(Box.createVerticalStrut(8))
+
+            val row2 = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0)).apply {
+                isOpaque = false
+                
+                val selectAllCheckbox = JCheckBox(MyBundle.message("prompt.selectAll")).apply {
+                    isOpaque = false
+                    addActionListener {
+                        val selected = isSelected
+                        importedItems.forEach { it.isSelected = selected }
+                        refreshStep1(panel)
+                    }
+                }
+                add(selectAllCheckbox)
+                
+                val prefixCheckbox = JCheckBox(MyBundle.message("prompt.applyPrefixShort"), applyPrefix).apply {
+                    isOpaque = false
+                    addActionListener {
+                        applyPrefix = isSelected
+                        importedItems.filter { it.isSelected }.forEach { it.applyPrefix(applyPrefix) }
+                        refreshStep1(panel)
+                    }
+                }
+                add(prefixCheckbox)
+                
+                add(Box.createHorizontalStrut(15))
+                
+                val customPrefixLabel = JBLabel(MyBundle.message("prompt.customPrefix"))
+                add(customPrefixLabel)
+                
+                val customPrefixField = JTextField(8).apply {
+                    minimumSize = Dimension(80, preferredSize.height)
+                }
+                add(customPrefixField)
+                
+                val applyCustomPrefixBtn = JButton(MyBundle.message("button.apply")).apply {
+                    addActionListener {
+                        val prefixText = customPrefixField.text
+                        importedItems.filter { it.isSelected }.forEach { 
+                            it.applyCustomPrefix(prefixText) 
+                        }
+                        refreshStep1(panel)
+                    }
+                }
+                add(applyCustomPrefixBtn)
+            }
+            add(row2)
         }
         
         panel.add(header, BorderLayout.NORTH)
@@ -178,10 +234,19 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
     private fun refreshStep1(panel: JPanel) {
         val header = panel.getComponent(0) as JPanel
-        val leftPanel = header.getComponent(0) as JPanel
-        val countLabel = leftPanel.getComponent(0) as JBLabel
+        
+        val row1 = header.getComponent(0) as JPanel
+        val countLabel = row1.getComponent(0) as JBLabel
         val count = importedItems.size
         countLabel.text = if (count == 1) MyBundle.message("title.step1") else MyBundle.message("title.step1_plural", count)
+
+        val rightActionsPanel = row1.getComponent(1) as JPanel
+        val deleteSelected = rightActionsPanel.getComponent(0) as JButton
+        deleteSelected.isEnabled = importedItems.any { it.isSelected }
+
+        val row2 = header.getComponent(2) as JPanel
+        val selectAllCheckbox = row2.getComponent(0) as JCheckBox
+        selectAllCheckbox.isSelected = importedItems.isNotEmpty() && importedItems.all { it.isSelected }
 
         val scrollPos = step1ScrollPane.verticalScrollBar.value
 
@@ -242,6 +307,17 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     onUpdate()
                 }
             })
+
+            val groupCheckbox = JCheckBox().apply {
+                isOpaque = false
+                isSelected = items.all { it.isSelected }
+                addActionListener {
+                    val selected = isSelected
+                    items.forEach { it.isSelected = selected }
+                    onUpdate()
+                }
+            }
+            headerPanel.add(groupCheckbox, BorderLayout.WEST)
             headerPanel.add(nameField, BorderLayout.CENTER)
 
             val removeAction = object : AnAction(AllIcons.Actions.Close) {
@@ -620,7 +696,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val summaryPanel = scrollPane.viewport.view as JPanel
         summaryPanel.removeAll()
         
-        val groupedItems = importedItems.filter { !it.doNotImport }.groupBy { it.name }
+        val groupedItems = importedItems.filter { it.isSelected }.groupBy { it.name }
 
         groupedItems.forEach { (name, items) ->
             val sortedItems = items.sortedBy { it.density.ordinal }
@@ -651,7 +727,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
         val editorText = (targetBox.editor.editorComponent as JTextField).text
         val (moduleName, baseType, subPath) = parseTargetText(editorText)
         
-        val itemsToImport = importedItems.filter { !it.doNotImport }
+        val itemsToImport = importedItems.filter { it.isSelected }
         if (itemsToImport.isEmpty()) return
 
         val task = object : com.intellij.openapi.progress.Task.Backgroundable(project, MyBundle.message("title.importDrawables"), true) {

@@ -3,6 +3,15 @@
 # Kmp Resources Unfold Changelog
 
 ## [Unreleased]
+### Added
+- **Asset Import Selection & Custom Prefixing**:
+    - Added individual selection checkboxes for resource groups to select which assets to import.
+    - Added a global "Select All" checkbox to toggle selection of all assets instantly.
+    - Added a "Custom Prefix" input field with an "Apply" button to batch-apply custom prefixes to selected assets.
+    - Added a "Remove Selected" button on the top-right of the import dialog to batch-remove all selected assets from the import list.
+- **Robust Prefix Handling**:
+    - Optimized prefixing logic to prevent duplicate prefixes (e.g., `tes_imag_tes_imag_...`) when clicking Apply multiple times.
+    - Correctly handle prefix ordering and combinations of standard and custom prefixes.
 
 ## [2.3.0]
 ### Added
