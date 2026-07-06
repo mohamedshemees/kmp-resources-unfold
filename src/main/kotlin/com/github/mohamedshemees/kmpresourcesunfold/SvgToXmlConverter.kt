@@ -24,6 +24,7 @@ object SvgToXmlConverter {
         "yellow" to "#ffff00",
         "cyan" to "#00ffff",
         "magenta" to "#ff00ff",
+        "currentcolor" to "#000000",
         "none" to null
     )
 
@@ -40,12 +41,6 @@ object SvgToXmlConverter {
         val heightStr = svgElement.getAttribute("height").replace("px", "")
         val width = widthStr.toDoubleOrNull()?.toInt() ?: DEFAULT_VIEWPORT_SIZE
         val height = heightStr.toDoubleOrNull()?.toInt() ?: DEFAULT_VIEWPORT_SIZE
-
-        val defaultFill = normalizeColor(svgElement.getAttribute("fill").ifEmpty {
-            val style = svgElement.getAttribute("style")
-            val fillMatch = Regex("fill:\\s*([^;]+)").find(style)
-            fillMatch?.groupValues?.get(1) ?: DEFAULT_FILL_COLOR
-        }) ?: DEFAULT_FILL_COLOR
 
         val minX = if (viewBox.size == 4) viewBox[0].toDoubleOrNull() ?: 0.0 else 0.0
         val minY = if (viewBox.size == 4) viewBox[1].toDoubleOrNull() ?: 0.0 else 0.0
@@ -67,14 +62,14 @@ object SvgToXmlConverter {
             append("${XML_INDENT}android:viewportWidth=\"$viewportWidth\"\n")
             append("${XML_INDENT}android:viewportHeight=\"$viewportHeight\">\n")
 
-            processChildren(this, svgElement, defaultFill, minX, minY, masks, 1)
+            processChildren(this, svgElement, minX, minY, masks, 1)
 
             append("</vector>")
         }
     }
 
     private fun processChildren(
-        sb: StringBuilder, parent: Element, defaultFill: String, 
+        sb: StringBuilder, parent: Element, 
         minX: Double, minY: Double, masks: Map<String, Element>, level: Int
     ) {
         val children = parent.childNodes
@@ -83,11 +78,11 @@ object SvgToXmlConverter {
             if (node.nodeType != Node.ELEMENT_NODE) continue
             val el = node as Element
             when (el.tagName.lowercase()) {
-                "rect"    -> appendRect(sb, el, defaultFill, minX, minY, level)
-                "path"    -> appendPath(sb, el, defaultFill, minX, minY, level)
-                "circle"  -> appendCircle(sb, el, defaultFill, minX, minY, level)
-                "ellipse" -> appendEllipse(sb, el, defaultFill, minX, minY, level)
-                "g"       -> appendGroup(sb, el, defaultFill, minX, minY, masks, level)
+                "rect"    -> appendRect(sb, el, minX, minY, level)
+                "path"    -> appendPath(sb, el, minX, minY, level)
+                "circle"  -> appendCircle(sb, el, minX, minY, level)
+                "ellipse" -> appendEllipse(sb, el, minX, minY, level)
+                "g"       -> appendGroup(sb, el, minX, minY, masks, level)
                 "mask", "defs", "style", "svg" -> { /* Handled or structural tags */ }
                 else -> LOG.warn("Unhandled SVG tag: ${el.tagName}")
             }
@@ -95,7 +90,7 @@ object SvgToXmlConverter {
     }
 
     private fun appendGroup(
-        sb: StringBuilder, el: Element, defaultFill: String, 
+        sb: StringBuilder, el: Element, 
         minX: Double, minY: Double, masks: Map<String, Element>, level: Int
     ) {
         val indent = XML_INDENT.repeat(level)
@@ -114,7 +109,7 @@ object SvgToXmlConverter {
             }
         }
 
-        processChildren(sb, el, defaultFill, minX, minY, masks, level + 1)
+        processChildren(sb, el, minX, minY, masks, level + 1)
         sb.append("${indent}</group>\n")
     }
 
@@ -136,16 +131,16 @@ object SvgToXmlConverter {
     }
 
     private fun appendPath(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
+        sb: StringBuilder, el: Element, minX: Double, minY: Double, level: Int
     ) {
         val rawPathData = el.getAttribute("d")
         if (rawPathData.isEmpty()) return
         val pathData = bakeTranslation(rawPathData, -minX, -minY)
-        appendShape(sb, el, pathData, defaultFill, level)
+        appendShape(sb, el, pathData, level)
     }
 
     private fun appendRect(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
+        sb: StringBuilder, el: Element, minX: Double, minY: Double, level: Int
     ) {
         val x  = el.getAttribute("x").toDoubleOrNull() ?: 0.0
         val y  = el.getAttribute("y").toDoubleOrNull() ?: 0.0
@@ -170,11 +165,11 @@ object SvgToXmlConverter {
             "L${fmt(l)},${fmt(t + r)}A${fmt(r)},${fmt(r)} 0,0 1,${fmt(l + r)} ${fmt(t)}z"
         }
 
-        appendShape(sb, el, pathData, defaultFill, level)
+        appendShape(sb, el, pathData, level)
     }
 
     private fun appendCircle(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
+        sb: StringBuilder, el: Element, minX: Double, minY: Double, level: Int
     ) {
         val cx = (el.getAttribute("cx").toDoubleOrNull() ?: 0.0) - minX
         val cy = (el.getAttribute("cy").toDoubleOrNull() ?: 0.0) - minY
@@ -182,11 +177,11 @@ object SvgToXmlConverter {
         
         val pathData = "M${fmt(cx)},${fmt(cy)}m${fmt(-r)},0a${fmt(r)},${fmt(r)} 0,1,1 ${fmt(2 * r)},0a${fmt(r)},${fmt(r)} 0,1,1 ${fmt(-2 * r)},0"
         
-        appendShape(sb, el, pathData, defaultFill, level)
+        appendShape(sb, el, pathData, level)
     }
 
     private fun appendEllipse(
-        sb: StringBuilder, el: Element, defaultFill: String, minX: Double, minY: Double, level: Int
+        sb: StringBuilder, el: Element, minX: Double, minY: Double, level: Int
     ) {
         val cx = (el.getAttribute("cx").toDoubleOrNull() ?: 0.0) - minX
         val cy = (el.getAttribute("cy").toDoubleOrNull() ?: 0.0) - minY
@@ -195,18 +190,37 @@ object SvgToXmlConverter {
         
         val pathData = "M${fmt(cx)},${fmt(cy)}m${fmt(-rx)},0a${fmt(rx)},${fmt(ry)} 0,1,1 ${fmt(2 * rx)},0a${fmt(rx)},${fmt(ry)} 0,1,1 ${fmt(-2 * rx)},0"
         
-        appendShape(sb, el, pathData, defaultFill, level)
+        appendShape(sb, el, pathData, level)
     }
 
-    private fun appendShape(sb: StringBuilder, el: Element, pathData: String, defaultFill: String, level: Int) {
+    private fun getInheritedAttribute(el: Element, name: String): String {
+        var current: Node? = el
+        while (current != null && current is Element) {
+            val attr = current.getAttribute(name).trim()
+            if (attr.isNotEmpty()) {
+                return attr
+            }
+            val style = current.getAttribute("style").trim()
+            if (style.isNotEmpty()) {
+                val match = Regex("${name}\\s*:\\s*([^;]+)").find(style)
+                if (match != null) {
+                    return match.groupValues[1].trim()
+                }
+            }
+            current = current.parentNode
+        }
+        return ""
+    }
+
+    private fun appendShape(sb: StringBuilder, el: Element, pathData: String, level: Int) {
         val indent = XML_INDENT.repeat(level)
         val subIndent = indent + XML_INDENT
 
-        val (fillColor, fillAlpha) = resolveFill(el, defaultFill)
+        val (fillColor, fillAlpha) = resolveFill(el)
         val (strokeColor, strokeAlpha) = resolveStroke(el)
-        val strokeWidth = el.getAttribute("stroke-width").trim()
-        val strokeLineCap = el.getAttribute("stroke-linecap").trim()
-        val strokeLineJoin = el.getAttribute("stroke-linejoin").trim()
+        val strokeWidth = getInheritedAttribute(el, "stroke-width")
+        val strokeLineCap = getInheritedAttribute(el, "stroke-linecap")
+        val strokeLineJoin = getInheritedAttribute(el, "stroke-linejoin")
 
         val effectiveFillRule = getEffectiveFillRule(el)
 
@@ -227,22 +241,20 @@ object SvgToXmlConverter {
         sb.append("/>\n")
     }
 
-    private fun resolveFill(el: Element, defaultFill: String): Pair<String, String?> {
-        val fillAttr = el.getAttribute("fill").trim()
-        val hasStroke = el.getAttribute("stroke").trim().let { it.isNotEmpty() && it != "none" }
+    private fun resolveFill(el: Element): Pair<String, String?> {
+        val fillAttr = getInheritedAttribute(el, "fill")
+        val strokeAttr = getInheritedAttribute(el, "stroke")
+        val hasStroke = strokeAttr.isNotEmpty() && strokeAttr != "none"
         val fill = when {
             fillAttr == "none" -> return Pair(TRANSPARENT_COLOR, null)
             fillAttr.isEmpty() && hasStroke -> return Pair(TRANSPARENT_COLOR, null)
-            fillAttr.isEmpty() -> defaultFill
-            else -> normalizeColor(fillAttr) ?: defaultFill
+            fillAttr.isEmpty() -> DEFAULT_FILL_COLOR
+            else -> normalizeColor(fillAttr) ?: DEFAULT_FILL_COLOR
         }
         val (fillColor, hexAlpha) = extractAlpha(fill)
 
-        val styleAttr = el.getAttribute("style")
-        val fillOpacityFromStyle = Regex("fill-opacity\\s*:\\s*([\\d.]+)").find(styleAttr)?.groupValues?.get(1)
-        val opacityFromStyle = Regex("(?<!fill-)opacity\\s*:\\s*([\\d.]+)").find(styleAttr)?.groupValues?.get(1)
-        val fillOpacityStr = el.getAttribute("fill-opacity").trim().ifEmpty { fillOpacityFromStyle ?: "" }
-        val opacityStr     = el.getAttribute("opacity").trim().ifEmpty { opacityFromStyle ?: "" }
+        val fillOpacityStr = getInheritedAttribute(el, "fill-opacity")
+        val opacityStr     = getInheritedAttribute(el, "opacity")
 
         val fillAlpha: String? = when {
             fillOpacityStr.isNotEmpty() -> formatAlpha(fillOpacityStr.toDoubleOrNull() ?: 1.0)
@@ -253,11 +265,11 @@ object SvgToXmlConverter {
     }
 
     private fun resolveStroke(el: Element): Pair<String?, String?> {
-        val strokeAttr = el.getAttribute("stroke").trim()
+        val strokeAttr = getInheritedAttribute(el, "stroke")
         if (strokeAttr.isEmpty() || strokeAttr == "none") return Pair(null, null)
         val strokeColor = normalizeColor(strokeAttr) ?: return Pair(null, null)
         val (color, hexAlpha) = extractAlpha(strokeColor)
-        val strokeOpacityStr = el.getAttribute("stroke-opacity").trim()
+        val strokeOpacityStr = getInheritedAttribute(el, "stroke-opacity")
         val alpha = if (strokeOpacityStr.isNotEmpty())
             formatAlpha(strokeOpacityStr.toDoubleOrNull() ?: 1.0)
         else hexAlpha
@@ -265,9 +277,7 @@ object SvgToXmlConverter {
     }
 
     private fun getEffectiveFillRule(el: Element): String {
-        val fillRule = el.getAttribute("fill-rule").trim().lowercase()
-        val fillRuleFromStyle = Regex("fill-rule\\s*:\\s*(\\S+)").find(el.getAttribute("style"))?.groupValues?.get(1)?.trim()?.lowercase()
-        return fillRule.ifEmpty { fillRuleFromStyle ?: "" }
+        return getInheritedAttribute(el, "fill-rule")
     }
 
     private sealed class PathToken {
