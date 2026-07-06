@@ -3,6 +3,8 @@
 # Kmp Resources Unfold Changelog
 
 ## [Unreleased]
+
+## [2.4.0]
 ### Added
 - **Asset Import Selection & Custom Prefixing**:
     - Added individual selection checkboxes for resource groups to select which assets to import.
@@ -12,6 +14,11 @@
 - **Robust Prefix Handling**:
     - Optimized prefixing logic to prevent duplicate prefixes (e.g., `tes_imag_tes_imag_...`) when clicking Apply multiple times.
     - Correctly handle prefix ordering and combinations of standard and custom prefixes.
+
+### Fixed
+- **SVG Style & Color Inheritance**:
+    - Resolved an issue in the SVG-to-XML converter where style and presentation attributes (like `fill`, `stroke`, `stroke-width`, `stroke-linecap`, etc.) defined on parent/group ancestor tags were ignored, causing icons (such as those from Lucide) to render as solid black blocks.
+    - Added support for mapping `currentColor` values dynamically to solid black (`#000000`) matching native IDE importer behaviors.
 
 ## [2.3.0]
 ### Added
