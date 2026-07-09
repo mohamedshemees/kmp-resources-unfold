@@ -94,6 +94,8 @@ object ResourceIconProvider {
                     renderVector(xmlContent, size)
                 } else null
             }
+
+            ResourceExtension.TTF, ResourceExtension.OTF, ResourceExtension.WOFF, ResourceExtension.WOFF2 -> null
         }
     }
 
@@ -122,6 +124,7 @@ object ResourceIconProvider {
                         VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
                     } else null
                 }
+                ResourceExtension.TTF, ResourceExtension.OTF, ResourceExtension.WOFF, ResourceExtension.WOFF2 -> null
             } ?: return null
 
             val scale = if (bufferedImage.width > size || bufferedImage.height > size) {

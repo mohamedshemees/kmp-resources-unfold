@@ -326,7 +326,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     onUpdate()
                 }
             }
-            val removeBtn = ActionButton(removeAction, removeAction.templatePresentation, "KmpResourcesUnfold", Dimension(22, 22))
+            val removeBtn = ActionButton(removeAction, removeAction.templatePresentation.clone(), "KmpResourcesUnfold", Dimension(22, 22))
             headerPanel.add(removeBtn, BorderLayout.EAST)
         }
         
@@ -466,7 +466,7 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     onUpdate()
                 }
             }
-            val individualRemoveBtn = ActionButton(individualRemoveAction, individualRemoveAction.templatePresentation, "KmpResourcesUnfold", Dimension(18, 18))
+            val individualRemoveBtn = ActionButton(individualRemoveAction, individualRemoveAction.templatePresentation.clone(), "KmpResourcesUnfold", Dimension(18, 18))
             itemRowPanel.add(individualRemoveBtn, BorderLayout.EAST)
         }
 

@@ -6,6 +6,9 @@
 
 ## [2.4.0]
 ### Added
+- **Local & Google Fonts Wizard**: Added support for browsing and downloading font families from Google Fonts, as well as importing local font files with renaming and prefixing capabilities.
+- **Dedicated Fonts Filter**: Added a "Fonts" filter chip in the tool window to view and filter font files in the project.
+- **Font Variation Selection**: Added selection checkboxes for individual font styles (Regular, Bold, etc.) with a "Select All" option and variable font support.
 - **Asset Import Selection & Custom Prefixing**:
     - Added individual selection checkboxes for resource groups to select which assets to import.
     - Added a global "Select All" checkbox to toggle selection of all assets instantly.
@@ -14,6 +17,9 @@
 - **Robust Prefix Handling**:
     - Optimized prefixing logic to prevent duplicate prefixes (e.g., `tes_imag_tes_imag_...`) when clicking Apply multiple times.
     - Correctly handle prefix ordering and combinations of standard and custom prefixes.
+
+### Changed
+- **Performance Enhancements**: Improved overall performance, search responsiveness, and list scrolling.
 
 ### Fixed
 - **SVG Style & Color Inheritance**:

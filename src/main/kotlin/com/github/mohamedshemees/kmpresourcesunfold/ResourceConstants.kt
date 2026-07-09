@@ -6,7 +6,11 @@ enum class ResourceExtension(val extension: String) {
     SVG("svg"),
     WEBP("webp"),
     JPG("jpg"),
-    JPEG("jpeg");
+    JPEG("jpeg"),
+    TTF("ttf"),
+    OTF("otf"),
+    WOFF("woff"),
+    WOFF2("woff2");
 
     companion object {
         fun fromExtension(ext: String?): ResourceExtension? =
@@ -14,6 +18,7 @@ enum class ResourceExtension(val extension: String) {
 
         val imageExtensions = setOf(PNG, WEBP, JPG, JPEG)
         val vectorExtensions = setOf(XML, SVG)
+        val fontExtensions = setOf(TTF, OTF, WOFF, WOFF2)
         val allExtensions = entries.map { it.extension }.toSet()
     }
 }
@@ -22,7 +27,8 @@ enum class ResourceType(val bundleKey: String) {
     ALL("filter.all"),
     VECTORS("filter.vectors"),
     IMAGES("filter.images"),
-    STRINGS("filter.strings");
+    STRINGS("filter.strings"),
+    FONTS("filter.fonts");
 
     companion object {
         fun fromFilterName(name: String): ResourceType =

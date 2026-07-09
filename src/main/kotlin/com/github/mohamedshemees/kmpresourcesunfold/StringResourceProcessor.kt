@@ -1,5 +1,6 @@
 package com.github.mohamedshemees.kmpresourcesunfold
 
+import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
@@ -9,12 +10,17 @@ data class StringResource(
     val key: String,
     val defaultValue: String,
     val missingLocales: List<String>,
-    val file: VirtualFile
+    val file: VirtualFile,
+    val moduleName: String = "Unknown"
 )
 
 object StringResourceProcessor {
 
-    fun findStringResources(project: Project, files: List<VirtualFile>): List<StringResource> {
+    fun findStringResources(
+        project: Project,
+        files: List<VirtualFile>,
+        fileToModuleMap: Map<VirtualFile, String> = emptyMap()
+    ): List<StringResource> {
         val stringFiles = files.filter { it.name == ResourceConstants.STRINGS_FILE }
         val defaultStringsFiles = stringFiles.filter { it.parent.name == ResourceConstants.VALUES_DIR }
         
@@ -22,10 +28,13 @@ object StringResourceProcessor {
 
         for (defaultFile in defaultStringsFiles) {
             val defaultStrings = parseStrings(project, defaultFile)
+            val moduleName = fileToModuleMap[defaultFile] ?: (ModuleUtilCore.findModuleForFile(defaultFile, project)?.name ?: "Unknown").let {
+                with(ResourceUtils) { it.cleanModuleName() }
+            }
 
             for ((key, value) in defaultStrings) {
                 val missing = getMissingTranslations(project, defaultFile, key)
-                resources.add(StringResource(key, value, missing, defaultFile))
+                resources.add(StringResource(key, value, missing, defaultFile, moduleName))
             }
         }
 

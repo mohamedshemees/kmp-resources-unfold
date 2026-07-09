@@ -42,7 +42,8 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
 data class ResourceParent(val name: String, val icon: Icon?, val representativeFile: VirtualFile?)
-data class ResourceChild(val file: VirtualFile, val density: String)
+data class ResourceChild(val file: VirtualFile, val density: String, val moduleName: String)
+data class ResourceFileItem(val file: VirtualFile, val moduleName: String)
 
 data class ModuleOption(val name: String, val displayName: String) {
     override fun toString() = displayName
@@ -70,15 +71,22 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         lateinit var updateList: () -> Unit
         lateinit var updateModuleBox: () -> Unit
 
+        val fileToModuleMap = mutableMapOf<VirtualFile, String>()
         var availableModules = listOf<String>()
 
         val refreshData = {
             ResourceIconProvider.clearCache()
             allFiles = KmpResourceScanner.findComposeDrawables(project)
-            allStringResources = StringResourceProcessor.findStringResources(project, allFiles)
-            availableModules = allFiles.mapNotNull { file ->
-                ModuleUtilCore.findModuleForFile(file, project)?.name
-            }.distinct().sorted()
+            fileToModuleMap.clear()
+            
+            allFiles.forEach { file ->
+                val name = ModuleUtilCore.findModuleForFile(file, project)?.name ?: "Unknown"
+                val clean = with(ResourceUtils) { name.cleanModuleName() }
+                fileToModuleMap[file] = clean
+            }
+            
+            allStringResources = StringResourceProcessor.findStringResources(project, allFiles, fileToModuleMap)
+            availableModules = fileToModuleMap.values.distinct().sorted()
         }
 
         refreshData()
@@ -86,13 +94,51 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         val actionGroup = DefaultActionGroup()
         val addAction = object : AnAction(MyBundle.message("action.import.title"), MyBundle.message("action.import.description"), com.intellij.icons.AllIcons.General.Add) {
             override fun actionPerformed(e: AnActionEvent) {
-                val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
-                descriptor.title = MyBundle.message("title.selectImages")
-                descriptor.withExtensionFilter(MyBundle.message("filter.images"), *ResourceExtension.allExtensions.toTypedArray() )
+                val popupGroup = DefaultActionGroup().apply {
+                    add(object : AnAction("Drawable", "Import drawable assets (SVG/PNG/JPG)", com.intellij.icons.AllIcons.FileTypes.Image) {
+                        override fun actionPerformed(evt: AnActionEvent) {
+                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
+                            descriptor.title = MyBundle.message("title.selectImages")
+                            descriptor.withExtensionFilter(MyBundle.message("filter.images"), *ResourceExtension.allExtensions.toTypedArray() )
+                            
+                            val files = FileChooser.chooseFiles(descriptor, project, null)
+                            if (files.isNotEmpty()) {
+                                ImportDrawablesDialog(project, files.toList()).show()
+                            }
+                        }
+                    })
+                    add(object : AnAction("Google Fonts...", "Import Google Font family variants", com.intellij.icons.AllIcons.Actions.Edit) {
+                        override fun actionPerformed(evt: AnActionEvent) {
+                            ImportFontDialog(project).show()
+                        }
+                    })
+                    add(object : AnAction("Local Font...", "Import font files from local device", com.intellij.icons.AllIcons.FileTypes.Any_type) {
+                        override fun actionPerformed(evt: AnActionEvent) {
+                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true)
+                            descriptor.title = "Select Local Font Files"
+                            descriptor.withExtensionFilter("Font Files (*.ttf, *.otf)", "ttf", "otf")
+
+                            val files = FileChooser.chooseFiles(descriptor, project, null)
+                            if (files.isNotEmpty()) {
+                                ImportLocalFontsDialog(project, files.toList()).show()
+                            }
+                        }
+                    })
+                }
                 
-                val files = FileChooser.chooseFiles(descriptor, project, null)
-                if (files.isNotEmpty()) {
-                    ImportDrawablesDialog(project, files.toList()).show()
+                val popup = JBPopupFactory.getInstance().createActionGroupPopup(
+                    null,
+                    popupGroup,
+                    e.dataContext,
+                    JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
+                    true
+                )
+                
+                val inputEvent = e.inputEvent
+                if (inputEvent != null && inputEvent.component != null) {
+                    popup.showUnderneathOf(inputEvent.component)
+                } else {
+                    popup.showInBestPositionFor(e.dataContext)
                 }
             }
         }
@@ -133,6 +179,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         chips.add(FilterChip(MyBundle.message("filter.vectors"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.images"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.strings"), false, 0, onChipClicked))
+        chips.add(FilterChip(MyBundle.message("filter.fonts"), false, 0, onChipClicked))
         chips.forEach { chipPanel.add(it) }
 
         project.messageBus.connect(toolWindow.disposable)
@@ -314,7 +361,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         
         val restartBtn = com.intellij.openapi.actionSystem.impl.ActionButton(
             restartAction, 
-            restartAction.templatePresentation, 
+            restartAction.templatePresentation.clone(), 
             "KmpResourcesUnfold", 
             Dimension(22, 22)
         )
@@ -366,6 +413,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                         is ResourceChild -> selected.file
                         is ResourceParent -> selected.representativeFile
                         is StringResource -> selected.file
+                        is ResourceFileItem -> selected.file
                         is VirtualFile -> selected
                         else -> null
                     }
@@ -377,6 +425,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                             is ResourceParent -> selected.name
                             is ResourceChild -> selected.file.nameWithoutExtension
                             is StringResource -> selected.key
+                            is ResourceFileItem -> selected.file.nameWithoutExtension
                             is VirtualFile -> selected.nameWithoutExtension
                             else -> ""
                         }
@@ -403,11 +452,12 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             val filteredFiles = allFiles.filter { file ->
                 val ext = ResourceExtension.fromExtension(file.extension)
-                val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                val moduleName = fileToModuleMap[file] ?: "Unknown"
                 val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
                 val matchesType = when (currentTypeFilter) {
                     ResourceType.VECTORS -> ResourceExtension.vectorExtensions.contains(ext)
                     ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
+                    ResourceType.FONTS -> ResourceExtension.fontExtensions.contains(ext)
                     ResourceType.STRINGS -> false
                     else -> ext != ResourceExtension.XML || !file.path.contains("values")
                 }
@@ -417,7 +467,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             val filteredStrings = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
                 allStringResources.filter { resource ->
-                    val moduleName = ModuleUtilCore.findModuleForFile(resource.file, project)?.name
+                    val moduleName = resource.moduleName
                     val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
                     val matchesSearch = resource.key.lowercase().contains(lowerSearch)
                     matchesModule && matchesSearch
@@ -426,7 +476,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             val filteredStringsFiles = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
                 allFiles.filter { file ->
-                    val moduleName = ModuleUtilCore.findModuleForFile(file, project)?.name
+                    val moduleName = fileToModuleMap[file] ?: "Unknown"
                     val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
                     val matchesSearch = file.name.lowercase().contains(lowerSearch)
                     file.name == ResourceConstants.STRINGS_FILE && matchesModule && matchesSearch
@@ -446,8 +496,8 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative))
 
                     sortedFiles.forEach { file ->
-
-                        resourceModel.addElement(ResourceChild(file, getDensity(file)))
+                        val moduleName = fileToModuleMap[file] ?: "Unknown"
+                        resourceModel.addElement(ResourceChild(file, getDensity(file), moduleName))
                     }
                 }
             }
@@ -455,7 +505,10 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             if (filteredStrings.isNotEmpty() || filteredStringsFiles.isNotEmpty()) {
                 resourceModel.addElement(ResourceParent("Strings", UIManager.getIcon("FileView.fileIcon"), filteredStringsFiles.firstOrNull()))
                 filteredStrings.sortedBy { it.key }.forEach { resourceModel.addElement(it) }
-                filteredStringsFiles.sortedBy { it.name }.forEach { resourceModel.addElement(it) }
+                filteredStringsFiles.sortedBy { it.name }.forEach { file ->
+                    val moduleName = fileToModuleMap[file] ?: "Unknown"
+                    resourceModel.addElement(ResourceFileItem(file, moduleName))
+                }
             }
 
             val totalResourcesCount = filteredFiles.size + filteredStrings.size + filteredStringsFiles.size

@@ -43,10 +43,7 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.foreground = JBColor.GRAY
                 label.font = label.font.deriveFont(11f)
                 
-                val moduleName = (ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown").let {
-                    with(ResourceUtils) { it.cleanModuleName() }
-                }
-                subLabel.text = moduleName
+                subLabel.text = value.moduleName
                 subLabel.foreground = JBColor.LIGHT_GRAY
                 subLabel.font = subLabel.font.deriveFont(9f)
                 
@@ -63,10 +60,7 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.icon = UIManager.getIcon("FileView.fileIcon")
                 label.font = label.font.deriveFont(Font.BOLD, 12f)
                 
-                val moduleName = (ModuleUtilCore.findModuleForFile(value.file, project)?.name ?: "Unknown").let {
-                    with(ResourceUtils) { it.cleanModuleName() }
-                }
-                subLabel.text = moduleName
+                subLabel.text = value.moduleName
                 subLabel.foreground = JBColor.GRAY
                 subLabel.font = subLabel.font.deriveFont(10f)
                 
@@ -88,16 +82,12 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 panel.add(contentPanel, BorderLayout.CENTER)
                 panel.add(infoLabel, BorderLayout.EAST)
             }
-            is VirtualFile -> {
-                label.text = value.name
-                label.icon = ResourceIconProvider.getIcon(value)
+            is ResourceFileItem -> {
+                label.text = value.file.name
+                label.icon = ResourceIconProvider.getIcon(value.file)
                 label.font = label.font.deriveFont(Font.BOLD, 12f)
 
-                
-                val moduleName = (ModuleUtilCore.findModuleForFile(value, project)?.name ?: "Unknown").let {
-                    with(ResourceUtils) { it.cleanModuleName() }
-                }
-                subLabel.text = moduleName
+                subLabel.text = value.moduleName
                 subLabel.foreground = JBColor.GRAY
                 subLabel.font = subLabel.font.deriveFont(10f)
                 
