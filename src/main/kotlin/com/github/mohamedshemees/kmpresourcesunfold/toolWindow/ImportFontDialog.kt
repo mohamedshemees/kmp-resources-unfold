@@ -460,8 +460,8 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
 
         val modules = ModuleManager.getInstance(project).modules.filter { m ->
             val name = m.name.lowercase()
-            val hasResources = ResourceUtils.getComposeResourcesDir(m, project) != null || 
-                               ResourceUtils.getAndroidResourcesDir(m, project) != null
+            val hasResources = ResourceUtils.getComposeResourcesDir(m) != null || 
+                               ResourceUtils.getAndroidResourcesDir(m) != null
             !name.contains("ios") && !name.contains("test") && hasResources
         }.sortedBy { it.name }
 
@@ -504,7 +504,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
 
     private fun updatePathField() {
         val module = targetBox.selectedItem as? Module ?: return
-        val resDirVirtual = ResourceUtils.getComposeResourcesDir(module, project)
+        val resDirVirtual = ResourceUtils.getComposeResourcesDir(module)
         if (resDirVirtual != null) {
             pathField.text = File(resDirVirtual.path, "font").absolutePath
         } else {

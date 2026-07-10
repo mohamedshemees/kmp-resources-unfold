@@ -81,7 +81,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             
             allFiles.forEach { file ->
                 val name = ModuleUtilCore.findModuleForFile(file, project)?.name ?: "Unknown"
-                val clean = with(ResourceUtils) { name.cleanModuleName() }
+                val clean = name
                 fileToModuleMap[file] = clean
             }
             
@@ -208,7 +208,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             allModuleOptions.clear()
             allModuleOptions.add(allModulesOption)
             availableModules.forEach {
-                val cleanName = with(ResourceUtils) { it.cleanModuleName() }
+                val cleanName = it
                 allModuleOptions.add(ModuleOption(it, cleanName))
             }
             

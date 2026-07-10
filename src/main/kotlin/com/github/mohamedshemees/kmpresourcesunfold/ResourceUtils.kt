@@ -9,10 +9,6 @@ import java.util.*
 import kotlin.math.ln
 
 object ResourceUtils {
-    fun String.cleanModuleName(): String {
-        val cleaned = this.replace(Regex("(?i)^\\.?mena\\.?"), "")
-        return if (cleaned.isEmpty()) this else cleaned
-    }
 
     fun formatSize(bytes: Long): String {
         if (bytes < 1024) return MyBundle.message("unit.bytes", bytes.toString())
@@ -25,12 +21,12 @@ object ResourceUtils {
         )
     }
 
-    fun getTargetResourceDir(module: Module, project: Project): VirtualFile? {
-        val resDir = getComposeResourcesDir(module, project) ?: return null
+    fun getTargetResourceDir(module: Module): VirtualFile? {
+        val resDir = getComposeResourcesDir(module) ?: return null
         return com.intellij.openapi.vfs.VfsUtil.createDirectoryIfMissing(resDir, "drawable")
     }
 
-    fun getComposeResourcesDir(module: Module, project: Project): VirtualFile? {
+    fun getComposeResourcesDir(module: Module): VirtualFile? {
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         for (root in contentRoots) {
             // Strictly look for resources under src/
@@ -40,7 +36,7 @@ object ResourceUtils {
         return null
     }
 
-    fun getAndroidResourcesDir(module: Module, project: Project): VirtualFile? {
+    fun getAndroidResourcesDir(module: Module): VirtualFile? {
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         for (root in contentRoots) {
             // Strictly look for resources under src/
@@ -50,10 +46,10 @@ object ResourceUtils {
         return null
     }
 
-    fun getAllResourceDirs(module: Module, project: Project): List<Pair<String, VirtualFile>> {
+    fun getAllResourceDirs(module: Module): List<Pair<String, VirtualFile>> {
         val dirs = mutableListOf<Pair<String, VirtualFile>>()
-        getComposeResourcesDir(module, project)?.let { dirs.add("Compose" to it) }
-        getAndroidResourcesDir(module, project)?.let { dirs.add("Android" to it) }
+        getComposeResourcesDir(module)?.let { dirs.add("Compose" to it) }
+        getAndroidResourcesDir(module)?.let { dirs.add("Android" to it) }
         return dirs
     }
 
@@ -64,8 +60,8 @@ object ResourceUtils {
 
     fun getOrCreateResourceDir(module: Module?, project: Project, targetType: String = "Compose"): VirtualFile? {
         val existing = when (targetType) {
-            "Android" -> module?.let { getAndroidResourcesDir(it, project) }
-            "Compose" -> module?.let { getComposeResourcesDir(it, project) }
+            "Android" -> module?.let { getAndroidResourcesDir(it) }
+            "Compose" -> module?.let { getComposeResourcesDir(it) }
             "Assets" -> {
                 val root = (module?.let { ModuleRootManager.getInstance(it).contentRoots.firstOrNull() } ?: project.guessProjectDir()) ?: return null
                 com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "assets")

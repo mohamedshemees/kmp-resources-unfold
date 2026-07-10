@@ -115,7 +115,7 @@ class ImportLocalFontsDialog(
         val isCustom: Boolean = false
     ) {
         override fun toString(): String {
-            val cleanName = module?.name?.let { with(ResourceUtils) { it.cleanModuleName() } }
+            val cleanName = module?.name
             return if (cleanName != null) "$cleanName: $targetType" else targetType
         }
     }
@@ -515,13 +515,13 @@ class ImportLocalFontsDialog(
         } else {
             val modules = ModuleManager.getInstance(project).modules.filter { module ->
                 val name = module.name.lowercase()
-                val hasResources = ResourceUtils.getComposeResourcesDir(module, project) != null || 
-                                   ResourceUtils.getAndroidResourcesDir(module, project) != null
+                val hasResources = ResourceUtils.getComposeResourcesDir(module) != null || 
+                                   ResourceUtils.getAndroidResourcesDir(module) != null
                 !name.contains("ios") && !name.contains("test") && hasResources
             }.sortedBy { it.name }
 
             modules.forEach { module ->
-                val existingTargets = ResourceUtils.getAllResourceDirs(module, project)
+                val existingTargets = ResourceUtils.getAllResourceDirs(module)
                 existingTargets.forEach { (type, file) ->
                     optionsList.add(TargetOption(module, type, file))
                 }
@@ -721,7 +721,7 @@ class ImportLocalFontsDialog(
                 try {
                     val module = if (moduleName != null) {
                         ModuleManager.getInstance(project).modules.find { 
-                            with(ResourceUtils) { it.name.cleanModuleName() } == moduleName || it.name == moduleName
+                            it.name == moduleName
                         }
                     } else null
 

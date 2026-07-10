@@ -28,9 +28,7 @@ object StringResourceProcessor {
 
         for (defaultFile in defaultStringsFiles) {
             val defaultStrings = parseStrings(project, defaultFile)
-            val moduleName = fileToModuleMap[defaultFile] ?: (ModuleUtilCore.findModuleForFile(defaultFile, project)?.name ?: "Unknown").let {
-                with(ResourceUtils) { it.cleanModuleName() }
-            }
+            val moduleName = fileToModuleMap[defaultFile] ?: ModuleUtilCore.findModuleForFile(defaultFile, project)?.name ?: "Unknown"
 
             for ((key, value) in defaultStrings) {
                 val missing = getMissingTranslations(project, defaultFile, key)
