@@ -1231,12 +1231,25 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             }
             infoPanel.add(pathLabel)
         } else {
-            val infoLabel = JBLabel("Variant: ${formatVariantName(item.variant)}, Format: ${item.extension.uppercase()}").apply {
-                foreground   = UIUtil.getLabelDisabledForeground()
-                font         = JBUI.Fonts.smallFont()
-                alignmentX   = Component.LEFT_ALIGNMENT
+            val rowLayout = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0)).apply {
+                isOpaque = false
+                alignmentX = Component.LEFT_ALIGNMENT
+                
+                add(JBLabel("Variant: ${formatVariantName(item.variant)}  ").apply {
+                    font = JBUI.Fonts.label()
+                })
+                
+                add(JBLabel("→  ${item.name}.${item.extension}").apply {
+                    font = JBUI.Fonts.label().deriveFont(Font.BOLD)
+                    foreground = com.intellij.ui.JBColor.blue
+                })
+                
+                add(JBLabel("  (Format: ${item.extension.uppercase()})").apply {
+                    font = JBUI.Fonts.smallFont()
+                    foreground = UIUtil.getLabelDisabledForeground()
+                })
             }
-            infoPanel.add(infoLabel)
+            infoPanel.add(rowLayout)
         }
 
         itemRowPanel.add(infoPanel, BorderLayout.CENTER)
