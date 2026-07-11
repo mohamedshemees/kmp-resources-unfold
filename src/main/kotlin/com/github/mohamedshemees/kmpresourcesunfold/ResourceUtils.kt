@@ -133,6 +133,7 @@ object ResourceUtils {
 
         val sb = StringBuilder()
         sb.append("package $packageName\n\n")
+        sb.append("import androidx.compose.runtime.Composable\n")
         sb.append("import androidx.compose.ui.text.font.FontFamily\n")
         sb.append("import androidx.compose.ui.text.font.FontWeight\n")
         sb.append("import androidx.compose.ui.text.font.FontStyle\n")
@@ -140,9 +141,10 @@ object ResourceUtils {
 
         fontFamilies.forEach { (familyName, fontFiles) ->
             val camelFamilyName = familyName.replace(" ", "").replace(Regex("[^a-zA-Z0-9]"), "")
-            val propertyName = camelFamilyName.replaceFirstChar { it.lowercase() } + "FontFamily"
+            val functionName = camelFamilyName.replaceFirstChar { it.lowercase() } + "FontFamily"
             
-            sb.append("val $propertyName = FontFamily(\n")
+            sb.append("@Composable\n")
+            sb.append("fun $functionName() = FontFamily(\n")
 
             fontFiles.forEachIndexed { index, (fileName, variant) ->
                 val resourceName = fileName.substringBeforeLast(".").lowercase()
