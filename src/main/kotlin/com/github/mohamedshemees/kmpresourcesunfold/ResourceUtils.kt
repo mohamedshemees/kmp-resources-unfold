@@ -133,6 +133,8 @@ object ResourceUtils {
 
         val sb = StringBuilder()
         sb.append("package $packageName\n\n")
+        sb.append("import androidx.compose.runtime.Composable\n")
+        sb.append("import org.jetbrains.compose.resources.ExperimentalResourceApi\n")
         sb.append("import androidx.compose.ui.text.font.FontFamily\n")
         sb.append("import androidx.compose.ui.text.font.Font\n")
         sb.append("import androidx.compose.ui.text.font.FontWeight\n")
@@ -141,7 +143,11 @@ object ResourceUtils {
 
         fontFamilies.forEach { (familyName, fontFiles) ->
             val camelFamilyName = familyName.replace(" ", "").replace(Regex("[^a-zA-Z0-9]"), "")
-            sb.append("val ${camelFamilyName}FontFamily = FontFamily(\n")
+            val functionName = camelFamilyName.replaceFirstChar { it.lowercase() } + "FontFamily"
+            
+            sb.append("@OptIn(ExperimentalResourceApi::class)\n")
+            sb.append("@Composable\n")
+            sb.append("fun $functionName() = FontFamily(\n")
 
             fontFiles.forEachIndexed { index, (fileName, variant) ->
                 val resourceName = fileName.substringBeforeLast(".").lowercase()
@@ -156,9 +162,14 @@ object ResourceUtils {
                     variant.contains("900") -> "FontWeight.Black"
                     else -> "FontWeight.Normal"
                 }
-                val style = if (variant.contains("italic")) "FontStyle.Italic" else "FontStyle.Normal"
+                
+                val stylePart = if (variant.contains("italic")) ",\n        style = FontStyle.Italic" else ""
                 val comma = if (index < fontFiles.size - 1) "," else ""
-                sb.append("    Font(Res.font.$resourceName, $weight, $style)$comma\n")
+                
+                sb.append("    Font(\n")
+                sb.append("        Res.font.$resourceName,\n")
+                sb.append("        weight = $weight$stylePart\n")
+                sb.append("    )$comma\n")
             }
             sb.append(")\n\n")
         }
