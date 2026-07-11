@@ -92,4 +92,79 @@ object ResourceUtils {
         }
         return result
     }
+
+    fun findBasePackage(module: Module): String {
+        val rootManager = ModuleRootManager.getInstance(module)
+        val sourceRoots = rootManager.sourceRoots
+        for (root in sourceRoots) {
+            val path = root.path
+            if (path.contains("src/commonMain/kotlin") || path.contains("src\\commonMain\\kotlin")) {
+                val basePackage = findPackageRecursively(root, "")
+                if (basePackage.isNotEmpty()) return basePackage
+            }
+        }
+        for (root in sourceRoots) {
+            val basePackage = findPackageRecursively(root, "")
+            if (basePackage.isNotEmpty()) return basePackage
+        }
+        return ""
+    }
+
+    private fun findPackageRecursively(dir: VirtualFile, currentPackage: String): String {
+        val children = dir.children ?: return currentPackage
+        val subDirs = children.filter { it.isDirectory && !it.name.startsWith(".") && it.name != "build" }
+        if (subDirs.size == 1) {
+            val subDir = subDirs.first()
+            val nextPackage = if (currentPackage.isEmpty()) subDir.name else "$currentPackage.${subDir.name}"
+            return findPackageRecursively(subDir, nextPackage)
+        }
+        return currentPackage
+    }
+
+    fun generateTypographyFile(
+        module: Module,
+        destinationFolder: java.io.File,
+        packageName: String,
+        fontFamilies: Map<String, List<Pair<String, String>>> // familyName to list of (fileName, variant)
+    ): java.io.File? {
+        if (!destinationFolder.exists()) {
+            destinationFolder.mkdirs()
+        }
+
+        val sb = StringBuilder()
+        sb.append("package $packageName\n\n")
+        sb.append("import androidx.compose.ui.text.font.FontFamily\n")
+        sb.append("import androidx.compose.ui.text.font.Font\n")
+        sb.append("import androidx.compose.ui.text.font.FontWeight\n")
+        sb.append("import androidx.compose.ui.text.font.FontStyle\n")
+        sb.append("\n")
+
+        fontFamilies.forEach { (familyName, fontFiles) ->
+            val camelFamilyName = familyName.replace(" ", "").replace(Regex("[^a-zA-Z0-9]"), "")
+            sb.append("val ${camelFamilyName}FontFamily = FontFamily(\n")
+
+            fontFiles.forEachIndexed { index, (fileName, variant) ->
+                val resourceName = fileName.substringBeforeLast(".").lowercase()
+                val weight = when {
+                    variant.contains("100") -> "FontWeight.Thin"
+                    variant.contains("200") -> "FontWeight.ExtraLight"
+                    variant.contains("300") -> "FontWeight.Light"
+                    variant.contains("500") -> "FontWeight.Medium"
+                    variant.contains("600") -> "FontWeight.SemiBold"
+                    variant.contains("700") || variant.contains("bold") -> "FontWeight.Bold"
+                    variant.contains("800") -> "FontWeight.ExtraBold"
+                    variant.contains("900") -> "FontWeight.Black"
+                    else -> "FontWeight.Normal"
+                }
+                val style = if (variant.contains("italic")) "FontStyle.Italic" else "FontStyle.Normal"
+                val comma = if (index < fontFiles.size - 1) "," else ""
+                sb.append("    Font(Res.font.$resourceName, $weight, $style)$comma\n")
+            }
+            sb.append(")\n\n")
+        }
+
+        val file = java.io.File(destinationFolder, "Typography.kt")
+        file.writeText(sb.toString().trimEnd() + "\n")
+        return file
+    }
 }

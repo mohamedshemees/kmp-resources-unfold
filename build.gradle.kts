@@ -1,6 +1,7 @@
-import org.gradle.kotlin.dsl.dependencies
+
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java") // Java support
@@ -35,11 +36,23 @@ dependencies {
             // On GitHub Actions, download the actual Android Studio metadata
             androidStudio("2024.2.1.12") // Ladybug
         } else {
-            // Locally, use your installed Panda version
-            local("C:/Program Files/Android/Android Studio")
+            // Locally, use installed Android Studio on macOS
+            local("/Applications/Android Studio.app")
         }
-        
-        bundledPlugins("org.jetbrains.kotlin", "org.jetbrains.android")
+
+        // Compose support dependencies
+        @Suppress("UnstableApiUsage")
+        composeUI()
+
+        // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
+        bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { 
+            listOf("org.jetbrains.kotlin", "org.jetbrains.android") + it.split(',').filter { it.isNotBlank() }
+        })
+
+        // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
+        plugins(providers.gradleProperty("platformPlugins").map { it.split(',') })
+
+        testFramework(TestFrameworkType.Platform)
     }
 }
 
@@ -100,7 +113,7 @@ intellijPlatform {
             if (System.getenv("CI") == "true") {
                 recommended()
             } else {
-                local("C:/Program Files/Android/Android Studio")
+                local("/Applications/Android Studio.app")
             }
         }
     }

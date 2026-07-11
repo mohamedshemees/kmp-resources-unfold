@@ -11,6 +11,7 @@ import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
+import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -26,6 +27,7 @@ import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
+import java.io.File
 import java.io.IOException
 import javax.swing.*
 import javax.swing.event.DocumentEvent
@@ -108,6 +110,9 @@ class ImportLocalFontsDialog(
     }
 
     private val targetBox = ComboBox<TargetOption>()
+    private val generateKotlinCb = JCheckBox("Generate Compose FontFamily / Typography code")
+    private val kotlinPathField = JTextField()
+    private val packageNameField = JTextField()
     private data class TargetOption(
         val module: Module?, 
         val targetType: String,
@@ -622,19 +627,120 @@ class ImportLocalFontsDialog(
 
         updateTargetBox()
 
+        val updateKotlinVisibility = {
+            val enabled = generateKotlinCb.isSelected
+            kotlinPathField.isEnabled = enabled
+            packageNameField.isEnabled = enabled
+        }
+        generateKotlinCb.isOpaque = false
+        generateKotlinCb.addActionListener { updateKotlinVisibility() }
+        kotlinPathField.isEditable = false
+        packageNameField.isOpaque = true
+
+        val updateKotlinPath = {
+            val selectedTarget = targetBox.selectedItem as? TargetOption
+            val module = selectedTarget?.module
+            if (module != null) {
+                val basePackage = ResourceUtils.findBasePackage(module)
+                packageNameField.text = if (basePackage.isNotEmpty()) "$basePackage.theme" else "theme"
+
+                val contentRoots = ModuleRootManager.getInstance(module).contentRoots
+                val commonMainKotlin = contentRoots.firstNotNullOfOrNull { root ->
+                    com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "commonMain", "kotlin")
+                } ?: contentRoots.firstNotNullOfOrNull { root ->
+                    com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "main", "kotlin")
+                }
+
+                if (commonMainKotlin != null) {
+                    val packagePath = if (basePackage.isNotEmpty()) basePackage.replace(".", "/") + "/theme" else "theme"
+                    val fullPath = File(commonMainKotlin.path, packagePath).absolutePath
+                    kotlinPathField.text = fullPath
+                } else {
+                    val firstRoot = contentRoots.firstOrNull { r -> !r.path.contains("/build/") && !r.path.contains("\\build\\") }
+                    kotlinPathField.text = firstRoot?.let { File(it.path, "src/commonMain/kotlin").absolutePath } ?: ""
+                }
+            } else {
+                kotlinPathField.text = ""
+                packageNameField.text = ""
+            }
+        }
+
+        val kotlinBrowseBtn = JButton("Browse...").apply {
+            addActionListener {
+                val selectedTarget = targetBox.selectedItem as? TargetOption
+                val module = selectedTarget?.module ?: return@addActionListener
+                val contentRoots = ModuleRootManager.getInstance(module).contentRoots
+                val descriptor = FileChooserDescriptor(false, true, false, false, false, false).apply {
+                    title = "Select Kotlin Source Folder"
+                    description = "Choose a package directory inside the module content root"
+                    setRoots(contentRoots.toList())
+                }
+
+                val initialFile = VfsUtil.findFileByIoFile(File(kotlinPathField.text), true)
+                    ?: contentRoots.firstOrNull()
+
+                val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(descriptor, project, initialFile)
+                if (chosen != null) {
+                    kotlinPathField.text = chosen.path
+
+                    val path = chosen.path
+                    val kotlinIndex = path.indexOf("/src/commonMain/kotlin/")
+                    val kotlinWinIndex = path.indexOf("\\src\\commonMain\\kotlin\\")
+                    val index = if (kotlinIndex != -1) {
+                        kotlinIndex + "/src/commonMain/kotlin/".length
+                    } else if (kotlinWinIndex != -1) {
+                        kotlinWinIndex + "\\src\\commonMain\\kotlin\\".length
+                    } else {
+                        val mainIndex = path.indexOf("/src/main/kotlin/")
+                        val mainWinIndex = path.indexOf("\\src\\main\\kotlin\\")
+                        if (mainIndex != -1) {
+                            mainIndex + "/src/main/kotlin/".length
+                        } else if (mainWinIndex != -1) {
+                            mainWinIndex + "\\src\\main\\kotlin\\".length
+                        } else {
+                            -1
+                        }
+                    }
+
+                    if (index != -1) {
+                        val relativePkg = path.substring(index).replace("/", ".").replace("\\", ".")
+                        packageNameField.text = relativePkg
+                    }
+                }
+            }
+        }
+        generateKotlinCb.addActionListener {
+            kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
+        }
+        kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
+
         targetBox.addActionListener {
             if (!isFiltering) {
                 val selected = targetBox.selectedItem as? TargetOption
                 if (selected != null && selected != lastSelectedTarget) {
                     lastSelectedTarget = selected
                     refreshStep2()
+                    updateKotlinPath()
                 }
             }
         }
 
+        updateKotlinPath()
+        updateKotlinVisibility()
+
         val form = panel {
             row("Target package:") {
                 cell(targetBox).align(com.intellij.ui.dsl.builder.AlignX.FILL)
+            }
+            row {
+                cell(generateKotlinCb)
+            }
+            row("Kotlin Source Folder:") {
+                cell(kotlinPathField).align(com.intellij.ui.dsl.builder.AlignX.FILL)
+                cell(kotlinBrowseBtn)
+            }
+            row("Package Name:") {
+                cell(packageNameField).align(com.intellij.ui.dsl.builder.AlignX.FILL)
             }
         }
         
@@ -707,12 +813,45 @@ class ImportLocalFontsDialog(
         }
     }
 
+    private fun getFamilyAndVariant(name: String): Pair<String, String> {
+        val cleanName = name.removePrefix("font_")
+        val variants = listOf(
+            "bold_italic", "bolditalic", "bold",
+            "medium_italic", "mediumitalic", "medium",
+            "light_italic", "lightitalic", "light",
+            "thin_italic", "thinitalic", "thin",
+            "italic", "regular"
+        )
+
+        var variant = "regular"
+        var family = cleanName
+
+        for (v in variants) {
+            if (cleanName.endsWith("_$v") || cleanName.endsWith(v)) {
+                variant = v
+                family = if (cleanName.endsWith("_$v")) {
+                    cleanName.substringBeforeLast("_$v")
+                } else {
+                    cleanName.substringBeforeLast(v)
+                }
+                break
+            }
+        }
+
+        val familyName = family.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+        return familyName to variant
+    }
+
     private fun performImport() {
         val editorText = (targetBox.editor.editorComponent as JTextField).text
         val (moduleName, baseType, _) = parseTargetText(editorText)
         
         val itemsToImport = importedItems.filter { it.isSelected }
         if (itemsToImport.isEmpty()) return
+
+        val generateKotlin = generateKotlinCb.isSelected
+        val kotlinDestPath = kotlinPathField.text
+        val packageName = packageNameField.text
 
         val task = object : com.intellij.openapi.progress.Task.Backgroundable(project, "Importing Fonts", true) {
             override fun run(indicator: com.intellij.openapi.progress.ProgressIndicator) {
@@ -744,6 +883,29 @@ class ImportLocalFontsDialog(
                     }
                     
                     VfsUtil.markDirtyAndRefresh(true, true, true, resDirVirtual)
+
+                    if (generateKotlin && module != null && kotlinDestPath.isNotEmpty()) {
+                        val fontFamilies = mutableMapOf<String, MutableList<Pair<String, String>>>()
+                        itemsToImport.forEach { item ->
+                            val finalFileName = "${item.name}.${item.extension}"
+                            val (family, variant) = getFamilyAndVariant(item.name)
+                            fontFamilies.getOrPut(family) { mutableListOf() }.add(finalFileName to variant)
+                        }
+                        try {
+                            ResourceUtils.generateTypographyFile(
+                                module = module,
+                                destinationFolder = File(kotlinDestPath),
+                                packageName = packageName,
+                                fontFamilies = fontFamilies
+                            )
+                            val virtualKotlinFolder = VfsUtil.findFileByIoFile(File(kotlinDestPath), true)
+                            if (virtualKotlinFolder != null) {
+                                VfsUtil.markDirtyAndRefresh(true, true, true, virtualKotlinFolder)
+                            }
+                        } catch (e: Exception) {
+                            // Ignore
+                        }
+                    }
                 } catch (e: Exception) {
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))
