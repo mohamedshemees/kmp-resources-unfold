@@ -133,21 +133,16 @@ object ResourceUtils {
 
         val sb = StringBuilder()
         sb.append("package $packageName\n\n")
-        sb.append("import androidx.compose.runtime.Composable\n")
-        sb.append("import org.jetbrains.compose.resources.ExperimentalResourceApi\n")
         sb.append("import androidx.compose.ui.text.font.FontFamily\n")
-        sb.append("import androidx.compose.ui.text.font.Font\n")
         sb.append("import androidx.compose.ui.text.font.FontWeight\n")
         sb.append("import androidx.compose.ui.text.font.FontStyle\n")
-        sb.append("\n")
+        sb.append("import org.jetbrains.compose.resources.Font\n\n")
 
         fontFamilies.forEach { (familyName, fontFiles) ->
             val camelFamilyName = familyName.replace(" ", "").replace(Regex("[^a-zA-Z0-9]"), "")
-            val functionName = camelFamilyName.replaceFirstChar { it.lowercase() } + "FontFamily"
+            val propertyName = camelFamilyName.replaceFirstChar { it.lowercase() } + "FontFamily"
             
-            sb.append("@OptIn(ExperimentalResourceApi::class)\n")
-            sb.append("@Composable\n")
-            sb.append("fun $functionName() = FontFamily(\n")
+            sb.append("val $propertyName = FontFamily(\n")
 
             fontFiles.forEachIndexed { index, (fileName, variant) ->
                 val resourceName = fileName.substringBeforeLast(".").lowercase()
@@ -163,13 +158,10 @@ object ResourceUtils {
                     else -> "FontWeight.Normal"
                 }
                 
-                val stylePart = if (variant.contains("italic")) ",\n        style = FontStyle.Italic" else ""
+                val stylePart = if (variant.contains("italic")) ", style = FontStyle.Italic" else ""
                 val comma = if (index < fontFiles.size - 1) "," else ""
                 
-                sb.append("    Font(\n")
-                sb.append("        Res.font.$resourceName,\n")
-                sb.append("        weight = $weight$stylePart\n")
-                sb.append("    )$comma\n")
+                sb.append("    Font(resource = Res.font.$resourceName, $weight$stylePart)$comma\n")
             }
             sb.append(")\n\n")
         }
