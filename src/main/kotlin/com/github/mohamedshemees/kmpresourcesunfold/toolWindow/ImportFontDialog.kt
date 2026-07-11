@@ -200,7 +200,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
 
             SwingUtilities.invokeLater {
                 if (apiKey.isNullOrEmpty()) {
-                    showApiKeySetupDialog()
+                    showApiKeySetupDialog(closeOnCancel = true)
                     return@invokeLater
                 }
 
@@ -233,11 +233,11 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         }
     }
 
-    private fun showApiKeySetupDialog() {
+    private fun showApiKeySetupDialog(closeOnCancel: Boolean = false) {
         val dialog = FontApiKeyDialog(project, cachedApiKey)
         if (dialog.showAndGet()) {
             checkKeyAndLoadList(false)
-        } else {
+        } else if (closeOnCancel) {
             close(CANCEL_EXIT_CODE)
         }
     }
