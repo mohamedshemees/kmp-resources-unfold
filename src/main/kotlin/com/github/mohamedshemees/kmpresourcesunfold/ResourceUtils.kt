@@ -172,4 +172,33 @@ object ResourceUtils {
         file.writeText(sb.toString().trimEnd() + "\n")
         return file
     }
+
+    fun getModuleRootDir(module: Module): java.io.File? {
+        val path = module.moduleFilePath
+        val imlFile = java.io.File(path)
+        if (imlFile.exists()) {
+            val parent = imlFile.parentFile
+            if (parent != null && parent.name != ".idea" && parent.name != "modules") {
+                return parent
+            }
+        }
+        val contentRoots = ModuleRootManager.getInstance(module).contentRoots
+        if (contentRoots.isNotEmpty()) {
+            return contentRoots.map { java.io.File(it.path) }.minByOrNull { it.absolutePath.length }
+        }
+        return null
+    }
+
+    fun getKotlinSourceDir(module: Module): java.io.File? {
+        val rootDir = getModuleRootDir(module) ?: return null
+        val commonMain = java.io.File(rootDir, "src/commonMain/kotlin")
+        if (commonMain.exists() && commonMain.isDirectory) {
+            return commonMain
+        }
+        val main = java.io.File(rootDir, "src/main/kotlin")
+        if (main.exists() && main.isDirectory) {
+            return main
+        }
+        return commonMain
+    }
 }

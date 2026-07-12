@@ -1351,20 +1351,13 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 val basePackage = ResourceUtils.findBasePackage(module)
                 packageNameField.text = if (basePackage.isNotEmpty()) "$basePackage.theme" else "theme"
 
-                val contentRoots = ModuleRootManager.getInstance(module).contentRoots
-                val commonMainKotlin = contentRoots.firstNotNullOfOrNull { root ->
-                    com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "commonMain", "kotlin")
-                } ?: contentRoots.firstNotNullOfOrNull { root ->
-                    com.intellij.openapi.vfs.VfsUtil.findRelativeFile(root, "src", "main", "kotlin")
-                }
-
-                if (commonMainKotlin != null) {
+                val kotlinSrcDir = ResourceUtils.getKotlinSourceDir(module)
+                if (kotlinSrcDir != null) {
                     val packagePath = if (basePackage.isNotEmpty()) basePackage.replace(".", "/") + "/theme" else "theme"
-                    val fullPath = File(commonMainKotlin.path, packagePath).absolutePath
+                    val fullPath = File(kotlinSrcDir, packagePath).absolutePath
                     kotlinPathField.text = fullPath
                 } else {
-                    val firstRoot = contentRoots.firstOrNull { r -> !r.path.contains("/build/") && !r.path.contains("\\build\\") }
-                    kotlinPathField.text = firstRoot?.let { File(it.path, "src/commonMain/kotlin").absolutePath } ?: ""
+                    kotlinPathField.text = ""
                 }
             } else {
                 kotlinPathField.text = ""
