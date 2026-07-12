@@ -27,6 +27,12 @@ class ResourceDocumentationTargetProvider : DocumentationTargetProvider {
             return listOf(ResourceDocumentationTarget(stringKey, file.project, ResourceDocumentationTarget.ResourceType.STRING, module))
         }
         
+        // 3. Check for Fonts
+        val fontKey = getResourceKey(element, "Res.font.")
+        if (fontKey != null) {
+            return listOf(ResourceDocumentationTarget(fontKey, file.project, ResourceDocumentationTarget.ResourceType.FONT, module))
+        }
+        
         return emptyList()
     }
 

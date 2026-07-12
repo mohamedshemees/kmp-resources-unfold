@@ -33,13 +33,12 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
         // 1. Handle Drawables (Res.drawable.key)
         if (parent is KtDotQualifiedExpression && parent.text.startsWith("Res.drawable.")) {
             if (parent.selectorExpression == element) {
-                val key = text
                 val project = element.project
                 val allFiles = KmpResourceScanner.findComposeDrawables(project)
-                val matchingFile = allFiles.find { it.nameWithoutExtension == key } ?: return null
+                val matchingFile = allFiles.find { it.nameWithoutExtension == text } ?: return null
                 val icon = ResourceIconProvider.getIcon(matchingFile, 18)
 
-                return createMarker(element, icon, "Click to swap drawable: $key") { e, elt ->
+                return createMarker(element, icon, "Click to swap drawable: $text") { e, elt ->
                     if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
                         showSwapPopup(e, elt.parent as KtDotQualifiedExpression)
                     }
@@ -55,6 +54,27 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                 return createMarker(element, icon, "Click to swap string: $key") { e, elt ->
                     if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
                         showStringSwapPopup(e, elt.parent as KtDotQualifiedExpression)
+                    }
+                }
+            }
+        }
+
+        // 3. Handle Fonts (Res.font.key)
+        if (parent is KtDotQualifiedExpression && parent.text.startsWith("Res.font.")) {
+            if (parent.selectorExpression == element) {
+                val key = text
+                val project = element.project
+                val allFiles = KmpResourceScanner.findComposeFonts(project)
+                val matchingFile = allFiles.find { it.nameWithoutExtension == key } ?: return null
+                
+                val icon = FontPreviewIcon(matchingFile)
+                val fontName = registerCustomFont(matchingFile) ?: key.replace("_", " ")
+                val fontStyle = if (fontName.isNotEmpty()) "font-family: '$fontName';" else ""
+                val tooltip = "<html><body style='padding: 5px; margin: 0;'><span style=\"$fontStyle font-size: 16px;\">AaBbCc - $fontName</span></body></html>"
+
+                return createMarker(element, icon, tooltip) { e, elt ->
+                    if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
+                        showFontSwapPopup(e, elt.parent as KtDotQualifiedExpression)
                     }
                 }
             }
@@ -170,4 +190,84 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
             .createPopup()
             .show(com.intellij.ui.awt.RelativePoint(e))
     }
+
+    private fun showFontSwapPopup(e: MouseEvent, expression: KtDotQualifiedExpression) {
+        val project = expression.project
+        val module = ModuleUtilCore.findModuleForPsiElement(expression) ?: return
+        val allFiles = KmpResourceScanner.findComposeFonts(project)
+        val moduleFiles = allFiles.filter { file ->
+            ModuleUtilCore.findModuleForFile(file, project) == module
+        }.sortedBy { it.nameWithoutExtension }
+
+        if (moduleFiles.isEmpty()) return
+
+        val list = JBList(moduleFiles)
+        list.cellRenderer = object : DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(
+                list: JList<*>?, value: Any?, index: Int, isSelected: Boolean, cellHasFocus: Boolean
+            ): Component {
+                val label = super.getListCellRendererComponent(
+                    list,
+                    value,
+                    index,
+                    isSelected,
+                    cellHasFocus
+                ) as javax.swing.JLabel
+                val file = value as VirtualFile
+                label.text = file.nameWithoutExtension
+                label.icon = FontPreviewIcon(file)
+                return label
+            }
+        }
+
+        JBPopupFactory.getInstance()
+            .createPopupChooserBuilder(moduleFiles)
+            .setTitle("Swap Font")
+            .setRenderer(list.cellRenderer)
+            .setItemChosenCallback { selectedFile ->
+                WriteCommandAction.runWriteCommandAction(project) {
+                    val factory = KtPsiFactory(project)
+                    val newExpression = factory.createExpression("Res.font.${selectedFile.nameWithoutExtension}")
+                    expression.replace(newExpression)
+                }
+            }
+            .setNamerForFiltering { it.nameWithoutExtension }
+            .createPopup()
+            .show(com.intellij.ui.awt.RelativePoint(e))
+    }
+}
+
+private fun registerCustomFont(file: VirtualFile): String? {
+    return try {
+        val font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, java.io.File(file.path))
+        val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+        ge.registerFont(font)
+        font.fontName
+    } catch (e: Exception) {
+        null
+    }
+}
+
+private class FontPreviewIcon(private val fontFile: VirtualFile) : javax.swing.Icon {
+    private var loadedFont: java.awt.Font? = null
+    
+    init {
+        try {
+            loadedFont = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, java.io.File(fontFile.path)).deriveFont(12f)
+        } catch (e: Exception) {}
+    }
+
+    override fun paintIcon(c: java.awt.Component?, g: java.awt.Graphics?, x: Int, y: Int) {
+        val g2d = g as? java.awt.Graphics2D ?: return
+        g2d.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        
+        val fontToUse = loadedFont ?: c?.font?.deriveFont(12f) ?: java.awt.Font("SansSerif", java.awt.Font.PLAIN, 12)
+        g2d.font = fontToUse
+        g2d.color = com.intellij.ui.JBColor.foreground()
+        
+        g2d.drawString("Aa", x + 1, y + 13)
+    }
+
+    override fun getIconWidth(): Int = 18
+    override fun getIconHeight(): Int = 18
 }

@@ -16,12 +16,13 @@ class ResourceDocumentationTarget(
     private val module: com.intellij.openapi.module.Module? = null
 ) : DocumentationTarget {
 
-    enum class ResourceType { DRAWABLE, STRING }
+    enum class ResourceType { DRAWABLE, STRING, FONT }
 
     override fun computeDocumentation(): DocumentationResult? {
         return when (type) {
             ResourceType.DRAWABLE -> computeDrawableDoc()
             ResourceType.STRING -> computeStringDoc()
+            ResourceType.FONT -> computeFontDoc()
         }
     }
 
@@ -103,5 +104,44 @@ class ResourceDocumentationTarget(
             if (resFile != null) return resFile
         }
         return null
+    }
+
+    private fun computeFontDoc(): DocumentationResult? {
+        val allFonts = KmpResourceScanner.findComposeFonts(project)
+        val matchingFile = allFonts.find { it.nameWithoutExtension == key } ?: return null
+        
+        val fontName = registerCustomFont(matchingFile) ?: key.replace("_", " ")
+        val fontStyle = if (fontName.isNotEmpty()) "font-family: '$fontName';" else ""
+        
+        val html = """
+            <div style="font-family: sans-serif; padding: 10px;">
+                <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px; color: #569CD6;">Font: $key</div>
+                <div style="margin-top: 10px; margin-bottom: 15px; border: 1px solid #444; padding: 10px; background: #2b2b2b; border-radius: 4px; display: inline-block;">
+                    <span style="$fontStyle font-size: 20px; color: #DCDCDC;">AaBbCcDdEeFfGgHhIiJjKkLlMm</span><br/>
+                    <span style="$fontStyle font-size: 14px; color: #A9B7C6; display: block; margin-top: 5px;">
+                        Grumpy wizards make toxic brew for the evil Queen.
+                    </span>
+                </div>
+                <div style="margin-top: 8px; color: #808080; font-size: 12px; line-height: 1.5;">
+                    <b style="color: #9CDCFE;">Font Family:</b> $fontName<br>
+                    <b style="color: #9CDCFE;">Format:</b> ${matchingFile.extension?.uppercase()}<br>
+                    <b style="color: #9CDCFE;">Path:</b> ${matchingFile.parent?.name}/${matchingFile.name}<br>
+                    <b style="color: #9CDCFE;">Size:</b> ${ResourceUtils.formatSize(matchingFile.length)}
+                </div>
+            </div>
+        """.trimIndent()
+        
+        return DocumentationResult.documentation(html)
+    }
+
+    private fun registerCustomFont(file: VirtualFile): String? {
+        return try {
+            val font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, java.io.File(file.path))
+            val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+            ge.registerFont(font)
+            font.fontName
+        } catch (e: Exception) {
+            null
+        }
     }
 }
