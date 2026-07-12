@@ -491,6 +491,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 val removeFamilyBtn = ActionButton(removeFamilyAction, removeFamilyAction.templatePresentation.clone(), "KmpResourcesUnfold", Dimension(16, 16))
                 familyPanel.add(removeFamilyBtn, BorderLayout.EAST)
 
+                familyPanel.maximumSize = Dimension(Int.MAX_VALUE, familyPanel.preferredSize.height)
                 selectionsSummaryPanel.add(familyPanel)
 
                 val stylesPanel = JPanel().apply {
@@ -535,12 +536,15 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                     }
                     val removeStyleBtn = ActionButton(removeStyleAction, removeStyleAction.templatePresentation.clone(), "KmpResourcesUnfold", Dimension(12, 12))
                     styleRow.add(removeStyleBtn, BorderLayout.EAST)
+                    styleRow.maximumSize = Dimension(Int.MAX_VALUE, styleRow.preferredSize.height)
                     stylesPanel.add(styleRow)
                 }
 
+                stylesPanel.maximumSize = Dimension(Int.MAX_VALUE, stylesPanel.preferredSize.height)
                 selectionsSummaryPanel.add(stylesPanel)
-                selectionsSummaryPanel.add(Box.createVerticalStrut(5))
+                selectionsSummaryPanel.add(Box.createVerticalStrut(2))
             }
+            selectionsSummaryPanel.add(Box.createVerticalGlue())
         }
 
         val border = summaryWrapper.border as? javax.swing.border.TitledBorder
