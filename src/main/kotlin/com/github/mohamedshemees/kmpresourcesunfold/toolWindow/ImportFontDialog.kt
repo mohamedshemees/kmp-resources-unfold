@@ -1130,6 +1130,8 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             isOpaque = false
         }
 
+        val labelMap = mutableMapOf<ImportedGoogleFontItem, JBLabel>()
+
         if (isSummary) {
             headerPanel.add(JBLabel(name).apply { 
                 font = font.deriveFont(Font.BOLD, 14f)
@@ -1138,25 +1140,30 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             val nameField = JTextField(name).apply {
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD, 13f)
             }
-            nameField.addFocusListener(object : java.awt.event.FocusAdapter() {
-                override fun focusLost(e: java.awt.event.FocusEvent?) {
-                    val text = nameField.text.trim()
-                    if (text.isNotEmpty()) {
-                        items.forEach { item ->
-                            val baseName = normalizeFontFilename(text, item.variant)
-                            item.name = baseName
-                            if (applyPrefix) {
-                                item.applyPrefix(true)
-                            }
-                            if (item.customPrefixApplied.isNotEmpty()) {
-                                val temp = item.customPrefixApplied
-                                item.customPrefixApplied = ""
-                                item.applyCustomPrefix(temp)
-                            }
+            
+            val updateNames = {
+                val text = nameField.text.trim()
+                if (text.isNotEmpty()) {
+                    items.forEach { item ->
+                        val baseName = normalizeFontFilename(text, item.variant)
+                        item.name = baseName
+                        if (applyPrefix) {
+                            item.applyPrefix(true)
                         }
-                        onUpdate()
+                        if (item.customPrefixApplied.isNotEmpty()) {
+                            val temp = item.customPrefixApplied
+                            item.customPrefixApplied = ""
+                            item.applyCustomPrefix(temp)
+                        }
+                        labelMap[item]?.text = "→  ${item.name}.${item.extension}"
                     }
                 }
+            }
+
+            nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
+                override fun insertUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
+                override fun removeUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
+                override fun changedUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
             })
 
             val groupCheckbox = JCheckBox().apply {
@@ -1190,7 +1197,10 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         }
 
         items.forEach { item ->
-            val row = createItemRow(item, isSummary, onUpdate)
+            val (row, blueLabel) = createItemRow(item, isSummary, onUpdate)
+            if (blueLabel != null) {
+                labelMap[item] = blueLabel
+            }
             itemsPanel.add(row)
         }
         groupPanel.add(itemsPanel, BorderLayout.CENTER)
@@ -1202,7 +1212,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         item: ImportedGoogleFontItem, 
         isSummary: Boolean, 
         onUpdate: () -> Unit
-    ): JPanel {
+    ): Pair<JPanel, JBLabel?> {
         val itemRowPanel = JPanel(BorderLayout(12, 0)).apply {
             border = JBUI.Borders.empty(5, 12)
             isOpaque = false
@@ -1213,6 +1223,8 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             isOpaque = false
             alignmentX = Component.LEFT_ALIGNMENT
         }
+
+        var blueLabel: JBLabel? = null
 
         if (isSummary) {
             val selectedTarget = targetBox.selectedItem as? Module
@@ -1235,6 +1247,11 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             }
             infoPanel.add(pathLabel)
         } else {
+            val label = JBLabel("→  ${item.name}.${item.extension}").apply {
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
+                foreground = com.intellij.ui.JBColor.blue
+            }
+            blueLabel = label
             val rowLayout = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0)).apply {
                 isOpaque = false
                 alignmentX = Component.LEFT_ALIGNMENT
@@ -1243,10 +1260,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                     font = JBUI.Fonts.label()
                 })
                 
-                add(JBLabel("→  ${item.name}.${item.extension}").apply {
-                    font = JBUI.Fonts.label().deriveFont(Font.BOLD)
-                    foreground = com.intellij.ui.JBColor.blue
-                })
+                add(label)
                 
                 add(JBLabel("  (Format: ${item.extension.uppercase()})").apply {
                     font = JBUI.Fonts.smallFont()
@@ -1270,8 +1284,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         }
 
         itemRowPanel.maximumSize = Dimension(Int.MAX_VALUE, itemRowPanel.preferredSize.height)
-
-        return itemRowPanel
+        return Pair(itemRowPanel, blueLabel)
     }
 
     private fun createStep3Panel(): JPanel {
@@ -1305,40 +1318,11 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         gbc.gridy = 1
         targetPanel.add(targetBox, gbc)
 
-        gbc.gridy = 2
-        targetPanel.add(JBLabel("Target Folder Path:"), gbc)
-
-        val pathPanel = JPanel(BorderLayout(5, 0))
-        pathField.isEditable = false
-        updatePathField()
-
-        pathPanel.add(pathField, BorderLayout.CENTER)
-        
-        val browseBtn = JButton("Browse...").apply {
-            addActionListener {
-                val descriptor = FileChooserDescriptor(false, true, false, false, false, false)
-                descriptor.title = "Select Font Destination Folder"
-                val initialFile = VfsUtil.findFileByIoFile(File(pathField.text), true)
-                val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(descriptor, project, initialFile)
-                if (chosen != null) {
-                    pathField.text = chosen.path
-                }
-            }
-        }
-        pathPanel.add(browseBtn, BorderLayout.EAST)
-
-        gbc.gridy = 3
-        targetPanel.add(pathPanel, gbc)
-
-        val kotlinFolderLabel = JBLabel("Kotlin Source Folder:")
-        kotlinPathField.isEditable = false
         val packageLabel = JBLabel("Package Name:")
         packageNameField.isOpaque = true
 
         val updateKotlinVisibility = {
             val enabled = generateKotlinCb.isSelected
-            kotlinFolderLabel.isEnabled = enabled
-            kotlinPathField.isEnabled = enabled
             packageLabel.isEnabled = enabled
             packageNameField.isEnabled = enabled
         }
@@ -1374,71 +1358,13 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
         updateKotlinPath()
         updateKotlinVisibility()
 
-        gbc.gridy = 4
+        gbc.gridy = 2
         targetPanel.add(generateKotlinCb, gbc)
 
-        gbc.gridy = 5
-        targetPanel.add(kotlinFolderLabel, gbc)
-
-        val kotlinPathPanel = JPanel(BorderLayout(5, 0))
-        kotlinPathPanel.add(kotlinPathField, BorderLayout.CENTER)
-
-        val kotlinBrowseBtn = JButton("Browse...").apply {
-            addActionListener {
-                val module = targetBox.selectedItem as? Module ?: return@addActionListener
-                val contentRoots = ModuleRootManager.getInstance(module).contentRoots
-                val descriptor = FileChooserDescriptor(false, true, false, false, false, false).apply {
-                    title = "Select Kotlin Source Folder"
-                    description = "Choose a package directory inside the module content root"
-                    setRoots(contentRoots.toList())
-                }
-
-                val initialFile = VfsUtil.findFileByIoFile(File(kotlinPathField.text), true)
-                    ?: contentRoots.firstOrNull()
-
-                val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(descriptor, project, initialFile)
-                if (chosen != null) {
-                    kotlinPathField.text = chosen.path
-
-                    val path = chosen.path
-                    val kotlinIndex = path.indexOf("/src/commonMain/kotlin/")
-                    val kotlinWinIndex = path.indexOf("\\src\\commonMain\\kotlin\\")
-                    val index = if (kotlinIndex != -1) {
-                        kotlinIndex + "/src/commonMain/kotlin/".length
-                    } else if (kotlinWinIndex != -1) {
-                        kotlinWinIndex + "\\src\\commonMain\\kotlin\\".length
-                    } else {
-                        val mainIndex = path.indexOf("/src/main/kotlin/")
-                        val mainWinIndex = path.indexOf("\\src\\main\\kotlin\\")
-                        if (mainIndex != -1) {
-                            mainIndex + "/src/main/kotlin/".length
-                        } else if (mainWinIndex != -1) {
-                            mainWinIndex + "\\src\\main\\kotlin\\".length
-                        } else {
-                            -1
-                        }
-                    }
-
-                    if (index != -1) {
-                        val relativePkg = path.substring(index).replace("/", ".").replace("\\", ".")
-                        packageNameField.text = relativePkg
-                    }
-                }
-            }
-        }
-        generateKotlinCb.addActionListener {
-            kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
-        }
-        kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
-        kotlinPathPanel.add(kotlinBrowseBtn, BorderLayout.EAST)
-
-        gbc.gridy = 6
-        targetPanel.add(kotlinPathPanel, gbc)
-
-        gbc.gridy = 7
+        gbc.gridy = 3
         targetPanel.add(packageLabel, gbc)
 
-        gbc.gridy = 8
+        gbc.gridy = 4
         targetPanel.add(packageNameField, gbc)
 
         panel.add(targetPanel, BorderLayout.NORTH)
