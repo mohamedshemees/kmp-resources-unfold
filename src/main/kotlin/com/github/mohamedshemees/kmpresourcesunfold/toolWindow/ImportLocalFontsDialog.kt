@@ -41,8 +41,17 @@ data class ImportedLocalFontItem(
     var name: String = sanitizeFontFilename(originalName)
     var customPrefixApplied: String = ""
 
+    var familyName: String
+    val variant: String
+
     val extension: String
         get() = file.extension ?: ""
+
+    init {
+        val (parsedFamily, parsedVariant) = getFamilyAndVariant(name)
+        familyName = parsedFamily
+        variant = parsedVariant
+    }
 
     fun applyPrefix(enabled: Boolean) {
         val stdPrefix = "font_"
@@ -79,6 +88,35 @@ data class ImportedLocalFontItem(
                 .replace(Regex("_+"), "_")
                 .trim('_')
         }
+
+        fun getFamilyAndVariant(name: String): Pair<String, String> {
+            val cleanName = name.removePrefix("font_")
+            val variants = listOf(
+                "bold_italic", "bolditalic", "bold",
+                "medium_italic", "mediumitalic", "medium",
+                "light_italic", "lightitalic", "light",
+                "thin_italic", "thinitalic", "thin",
+                "italic", "regular"
+            )
+
+            var variant = "regular"
+            var family = cleanName
+
+            for (v in variants) {
+                if (cleanName.endsWith("_$v") || cleanName.endsWith(v)) {
+                    variant = v
+                    family = if (cleanName.endsWith("_$v")) {
+                        cleanName.substringBeforeLast("_$v")
+                    } else {
+                        cleanName.substringBeforeLast(v)
+                    }
+                    break
+                }
+            }
+
+            val familyName = family.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            return familyName to variant
+        }
     }
 }
 
@@ -109,19 +147,20 @@ class ImportLocalFontsDialog(
         horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
     }
 
-    private val targetBox = ComboBox<TargetOption>()
+    private val targetBox = ComboBox<Module>()
+    private val pathField = JTextField()
     private val generateKotlinCb = JCheckBox("Generate Compose FontFamily / Typography code")
     private val kotlinPathField = JTextField()
     private val packageNameField = JTextField()
-    private data class TargetOption(
-        val module: Module?, 
-        val targetType: String,
-        val file: VirtualFile?,
-        val isCustom: Boolean = false
-    ) {
-        override fun toString(): String {
-            val cleanName = module?.name
-            return if (cleanName != null) "$cleanName: $targetType" else targetType
+
+    private var isImportAndContinue = false
+    private val importMoreAction = object : AbstractAction("Import & Choose More") {
+        init {
+            putValue(DEFAULT_ACTION, java.lang.Boolean.FALSE)
+        }
+        override fun actionPerformed(e: java.awt.event.ActionEvent) {
+            isImportAndContinue = true
+            doOKAction()
         }
     }
 
@@ -301,7 +340,7 @@ class ImportLocalFontsDialog(
 
         step1ListPanel.removeAll()
 
-        val groupedItems = importedItems.groupBy { it.name }
+        val groupedItems = importedItems.groupBy { it.familyName }
 
         groupedItems.forEach { (name, items) ->
             val itemPanel = createGroupPanel(name, items, isSummary = false) { refreshStep1(panel) }
@@ -337,6 +376,8 @@ class ImportLocalFontsDialog(
             isOpaque = false
         }
 
+        val labelMap = mutableMapOf<ImportedLocalFontItem, JBLabel>()
+
         if (isSummary) {
             headerPanel.add(JBLabel(name).apply { 
                 font = font.deriveFont(Font.BOLD, 14f)
@@ -345,15 +386,31 @@ class ImportLocalFontsDialog(
             val nameField = JTextField(name).apply {
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD, 13f)
             }
-            nameField.addFocusListener(object : java.awt.event.FocusAdapter() {
-                override fun focusLost(e: java.awt.event.FocusEvent?) {
-                    val text = nameField.text
-                    items.forEach { 
-                        val currentPrefix = if (it.name.startsWith("font_")) "font_" else ""
-                        it.name = if (applyPrefix && !text.startsWith(currentPrefix)) "$currentPrefix$text" else text
+            
+            val updateNames = {
+                val text = nameField.text.trim()
+                if (text.isNotEmpty()) {
+                    items.forEach { item ->
+                        item.familyName = text
+                        val baseName = normalizeLocalFontFilename(text, item.variant)
+                        item.name = baseName
+                        if (applyPrefix) {
+                            item.applyPrefix(true)
+                        }
+                        if (item.customPrefixApplied.isNotEmpty()) {
+                            val temp = item.customPrefixApplied
+                            item.customPrefixApplied = ""
+                            item.applyCustomPrefix(temp)
+                        }
+                        labelMap[item]?.text = "→  ${item.name}.${item.extension}"
                     }
-                    onUpdate()
                 }
+            }
+
+            nameField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
+                override fun insertUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
+                override fun removeUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
+                override fun changedUpdate(e: javax.swing.event.DocumentEvent) { updateNames() }
             })
 
             val groupCheckbox = JCheckBox().apply {
@@ -387,7 +444,10 @@ class ImportLocalFontsDialog(
         }
 
         items.forEach { item ->
-            val row = createItemRow(item, isSummary, onUpdate)
+            val (row, blueLabel) = createItemRow(item, isSummary, onUpdate)
+            if (blueLabel != null) {
+                labelMap[item] = blueLabel
+            }
             itemsPanel.add(row)
         }
         groupPanel.add(itemsPanel, BorderLayout.CENTER)
@@ -399,7 +459,7 @@ class ImportLocalFontsDialog(
         item: ImportedLocalFontItem, 
         isSummary: Boolean, 
         onUpdate: () -> Unit
-    ): JPanel {
+    ): Pair<JPanel, JBLabel?> {
         val itemRowPanel = JPanel(BorderLayout(12, 0)).apply {
             border = JBUI.Borders.empty(5, 12)
             isOpaque = false
@@ -411,17 +471,13 @@ class ImportLocalFontsDialog(
             alignmentX = Component.LEFT_ALIGNMENT
         }
 
+        var blueLabel: JBLabel? = null
+
         if (isSummary) {
-            val editorText = (targetBox.editor.editorComponent as JTextField).text
-            val (_, baseType, _) = parseTargetText(editorText)
-            
-            val selectedTarget = targetBox.selectedItem as? TargetOption
-            val resDirName = selectedTarget?.file?.name ?: when(baseType) {
-                "Android" -> "res"
-                "Compose" -> "composeResources"
-                "Assets" -> "assets"
-                else -> baseType.ifEmpty { "composeResources" }
-            }
+            val selectedTarget = targetBox.selectedItem as? Module
+            val resDirName = if (selectedTarget != null) {
+                ResourceUtils.getComposeResourcesDir(selectedTarget)?.name ?: "composeResources"
+            } else "composeResources"
             
             val targetPath = "$resDirName/font/${item.name}.${item.extension}"
             
@@ -438,13 +494,29 @@ class ImportLocalFontsDialog(
             }
             infoPanel.add(pathLabel)
         } else {
-            val size = ResourceUtils.formatSize(item.file.length)
-            val infoLabel = JBLabel("Size: $size, Format: ${item.extension.uppercase()}").apply {
-                foreground   = UIUtil.getLabelDisabledForeground()
-                font         = JBUI.Fonts.smallFont()
-                alignmentX   = Component.LEFT_ALIGNMENT
+            val label = JBLabel("→  ${item.name}.${item.extension}").apply {
+                font = JBUI.Fonts.label().deriveFont(Font.BOLD)
+                foreground = com.intellij.ui.JBColor.blue
             }
-            infoPanel.add(infoLabel)
+            blueLabel = label
+            val size = ResourceUtils.formatSize(item.file.length)
+
+            val rowLayout = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0)).apply {
+                isOpaque = false
+                alignmentX = Component.LEFT_ALIGNMENT
+                
+                add(JBLabel("Variant: ${formatVariantName(item.variant)}  ").apply {
+                    font = JBUI.Fonts.label()
+                })
+                
+                add(label)
+                
+                add(JBLabel("  (Size: $size, Format: ${item.extension.uppercase()})").apply {
+                    font = JBUI.Fonts.smallFont()
+                    foreground = UIUtil.getLabelDisabledForeground()
+                })
+            }
+            infoPanel.add(rowLayout)
         }
 
         itemRowPanel.add(infoPanel, BorderLayout.CENTER)
@@ -462,7 +534,7 @@ class ImportLocalFontsDialog(
 
         itemRowPanel.maximumSize = Dimension(Int.MAX_VALUE, itemRowPanel.preferredSize.height)
 
-        return itemRowPanel
+        return Pair(itemRowPanel, blueLabel)
     }
 
     private fun parseTargetText(text: String): Triple<String?, String, String?> {
@@ -474,172 +546,69 @@ class ImportLocalFontsDialog(
         val subPath = if (typeSubParts.size > 1) typeSubParts[1] else null
         
         return Triple(modulePart, baseType, subPath)
-    }
-
-    private fun createStep2Panel(): JPanel {
+    }    private fun createStep2Panel(): JPanel {
         val panel = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(20)
         }
-        
-        targetBox.isEditable = true
-        val editor = targetBox.editor.editorComponent as JTextField
-        var isFiltering = false
-        var lastSelectedTarget: TargetOption? = null
-        
-        lateinit var allTargetOptions: List<TargetOption>
-        
-        val updateTargetBox = {
-            val selectedBefore = targetBox.selectedItem as? TargetOption
-            isFiltering = true
-            targetBox.removeAllItems()
-            allTargetOptions.forEach {
-                targetBox.addItem(it)
-            }
-            if (selectedBefore != null) {
-                val found = allTargetOptions.find { it == selectedBefore }
-                if (found != null) {
-                    targetBox.selectedItem = found
-                    lastSelectedTarget = found
-                } else if (targetBox.itemCount > 0) {
-                    targetBox.selectedIndex = 0
-                    lastSelectedTarget = allTargetOptions[0]
-                }
-            } else if (targetBox.itemCount > 0) {
-                targetBox.selectedIndex = 0
-                lastSelectedTarget = allTargetOptions[0]
-            }
-            isFiltering = false
+
+        val targetPanel = JPanel(GridBagLayout()).apply {
+            border = BorderFactory.createTitledBorder("Destination Setup")
         }
-        
-        val optionsList = mutableListOf<TargetOption>()
-        if (ResourceUtils.isFlutterProject(project)) {
-            val projectDir = project.guessProjectDir()
-            projectDir?.children?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { dir ->
-                optionsList.add(TargetOption(null, dir.name, dir))
-            }
-        } else {
-            val modules = ModuleManager.getInstance(project).modules.filter { module ->
-                val name = module.name.lowercase()
-                val hasResources = ResourceUtils.getComposeResourcesDir(module) != null || 
-                                   ResourceUtils.getAndroidResourcesDir(module) != null
-                !name.contains("ios") && !name.contains("test") && hasResources
-            }.sortedBy { it.name }
-
-            modules.forEach { module ->
-                val existingTargets = ResourceUtils.getAllResourceDirs(module)
-                existingTargets.forEach { (type, file) ->
-                    optionsList.add(TargetOption(module, type, file))
-                }
-                
-                com.intellij.openapi.roots.ModuleRootManager.getInstance(module).contentRoots
-                    .firstNotNullOfOrNull { com.intellij.openapi.vfs.VfsUtil.findRelativeFile(it, "assets") }
-                    ?.let { optionsList.add(TargetOption(module, "Assets", it)) }
-            }
+        val gbc = GridBagConstraints().apply {
+            fill = GridBagConstraints.HORIZONTAL
+            insets = JBUI.insets(5)
+            weightx = 1.0
+            gridx = 0
+            gridy = 0
         }
-        
-        allTargetOptions = optionsList
 
-        editor.document.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent) = filter()
-            override fun removeUpdate(e: DocumentEvent) = filter()
-            override fun changedUpdate(e: DocumentEvent) = filter()
-            
-            fun filter() {
-                if (isFiltering) return
-                SwingUtilities.invokeLater {
-                    if (isFiltering) return@invokeLater
-                    
-                    val text = editor.text
-                    val currentSelected = targetBox.selectedItem as? TargetOption
-                    val isExactMatch = currentSelected != null && currentSelected.toString() == text
-                    
-                    if (!isExactMatch) {
-                        isFiltering = true
-                        val caret = editor.caretPosition
-                        targetBox.removeAllItems()
-                        val matches = allTargetOptions.filter {
-                            it.toString().lowercase().contains(text.lowercase())
-                        }
-                        matches.forEach { targetBox.addItem(it) }
-                        
-                        editor.text = text
-                        editor.caretPosition = caret
-                        if (matches.isNotEmpty() && !targetBox.isPopupVisible && editor.hasFocus()) {
-                            targetBox.showPopup()
-                        }
-                        isFiltering = false
-                    }
-                    refreshStep2()
-                }
-            }
-        })
+        targetPanel.add(JBLabel("Target Module:"), gbc)
 
-        editor.addFocusListener(object : java.awt.event.FocusAdapter() {
-            override fun focusLost(e: java.awt.event.FocusEvent?) {
-                if (isFiltering) return
-                val text = editor.text
-                if (text.isNotEmpty()) {
-                    val match = allTargetOptions.find { it.toString() == text }
-                    if (match != null) {
-                        isFiltering = true
-                        targetBox.selectedItem = match
-                        isFiltering = false
-                    }
-                }
-            }
-        })
+        val modules = ModuleManager.getInstance(project).modules.filter { m ->
+            val name = m.name.lowercase()
+            val hasResources = ResourceUtils.getComposeResourcesDir(m) != null || 
+                               ResourceUtils.getAndroidResourcesDir(m) != null
+            !name.contains("ios") && !name.contains("test") && hasResources
+        }.sortedBy { it.name }
 
-        editor.addKeyListener(object : KeyAdapter() {
-            override fun keyPressed(e: KeyEvent) {
-                if (e.keyCode == KeyEvent.VK_ENTER) {
-                    e.consume()
-                    targetBox.hidePopup()
-                    val text = editor.text
-                    val match = allTargetOptions.find { it.toString() == text } ?: if (targetBox.itemCount > 0) targetBox.getItemAt(0) else null
-                    if (match != null) {
-                        isFiltering = true
-                        targetBox.selectedItem = match
-                        editor.text = match.toString()
-                        isFiltering = false
-                        if (match != lastSelectedTarget) {
-                            lastSelectedTarget = match
-                            refreshStep2()
-                        }
-                    }
-                }
-            }
-        })
-        
-        targetBox.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {}
-            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {
-                SwingUtilities.invokeLater {
-                    isFiltering = true
-                    val currentSelected = targetBox.selectedItem
-                    targetBox.removeAllItems()
-                    allTargetOptions.forEach { targetBox.addItem(it) }
-                    targetBox.selectedItem = currentSelected
-                    isFiltering = false
-                }
-            }
-            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
-        })
+        targetBox.removeAllItems()
+        modules.forEach { targetBox.addItem(it) }
 
-        updateTargetBox()
+        gbc.gridy = 1
+        targetPanel.add(targetBox, gbc)
+
+        val packageLabel = JBLabel("Package Name:")
+        packageNameField.isOpaque = true
 
         val updateKotlinVisibility = {
             val enabled = generateKotlinCb.isSelected
-            kotlinPathField.isEnabled = enabled
+            packageLabel.isEnabled = enabled
             packageNameField.isEnabled = enabled
         }
         generateKotlinCb.isOpaque = false
         generateKotlinCb.addActionListener { updateKotlinVisibility() }
-        kotlinPathField.isEditable = false
-        packageNameField.isOpaque = true
+
+        val updatePathField = {
+            val module = targetBox.selectedItem as? Module
+            if (module != null) {
+                val resDir = ResourceUtils.getComposeResourcesDir(module) ?: ResourceUtils.getAndroidResourcesDir(module)
+                if (resDir != null) {
+                    pathField.text = File(resDir.path, "font").absolutePath
+                } else {
+                    val firstRoot = ModuleRootManager.getInstance(module).contentRoots.firstOrNull { r -> !r.path.contains("/build/") && !r.path.contains("\\build\\") }
+                    if (firstRoot != null) {
+                        pathField.text = File(firstRoot.path, "src/commonMain/composeResources/font").absolutePath
+                    } else {
+                        pathField.text = ""
+                    }
+                }
+            } else {
+                pathField.text = ""
+            }
+        }
 
         val updateKotlinPath = {
-            val selectedTarget = targetBox.selectedItem as? TargetOption
-            val module = selectedTarget?.module
+            val module = targetBox.selectedItem as? Module
             if (module != null) {
                 val basePackage = ResourceUtils.findBasePackage(module)
                 packageNameField.text = if (basePackage.isNotEmpty()) "$basePackage.theme" else "theme"
@@ -658,105 +627,44 @@ class ImportLocalFontsDialog(
             }
         }
 
-        val kotlinBrowseBtn = JButton("Browse...").apply {
-            addActionListener {
-                val selectedTarget = targetBox.selectedItem as? TargetOption
-                val module = selectedTarget?.module ?: return@addActionListener
-                val contentRoots = ModuleRootManager.getInstance(module).contentRoots
-                val descriptor = FileChooserDescriptor(false, true, false, false, false, false).apply {
-                    title = "Select Kotlin Source Folder"
-                    description = "Choose a package directory inside the module content root"
-                    setRoots(contentRoots.toList())
-                }
-
-                val initialFile = VfsUtil.findFileByIoFile(File(kotlinPathField.text), true)
-                    ?: contentRoots.firstOrNull()
-
-                val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(descriptor, project, initialFile)
-                if (chosen != null) {
-                    kotlinPathField.text = chosen.path
-
-                    val path = chosen.path
-                    val kotlinIndex = path.indexOf("/src/commonMain/kotlin/")
-                    val kotlinWinIndex = path.indexOf("\\src\\commonMain\\kotlin\\")
-                    val index = if (kotlinIndex != -1) {
-                        kotlinIndex + "/src/commonMain/kotlin/".length
-                    } else if (kotlinWinIndex != -1) {
-                        kotlinWinIndex + "\\src\\commonMain\\kotlin\\".length
-                    } else {
-                        val mainIndex = path.indexOf("/src/main/kotlin/")
-                        val mainWinIndex = path.indexOf("\\src\\main\\kotlin\\")
-                        if (mainIndex != -1) {
-                            mainIndex + "/src/main/kotlin/".length
-                        } else if (mainWinIndex != -1) {
-                            mainWinIndex + "\\src\\main\\kotlin\\".length
-                        } else {
-                            -1
-                        }
-                    }
-
-                    if (index != -1) {
-                        val relativePkg = path.substring(index).replace("/", ".").replace("\\", ".")
-                        packageNameField.text = relativePkg
-                    }
-                }
-            }
-        }
-        generateKotlinCb.addActionListener {
-            kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
-        }
-        kotlinBrowseBtn.isEnabled = generateKotlinCb.isSelected
-
         targetBox.addActionListener {
-            if (!isFiltering) {
-                val selected = targetBox.selectedItem as? TargetOption
-                if (selected != null && selected != lastSelectedTarget) {
-                    lastSelectedTarget = selected
-                    refreshStep2()
-                    updateKotlinPath()
-                }
-            }
+            updatePathField()
+            updateKotlinPath()
+            refreshStep2()
         }
-
+        updatePathField()
         updateKotlinPath()
         updateKotlinVisibility()
 
-        val form = panel {
-            row("Target package:") {
-                cell(targetBox).align(com.intellij.ui.dsl.builder.AlignX.FILL)
-            }
-            row {
-                cell(generateKotlinCb)
-            }
-            row("Kotlin Source Folder:") {
-                cell(kotlinPathField).align(com.intellij.ui.dsl.builder.AlignX.FILL)
-                cell(kotlinBrowseBtn)
-            }
-            row("Package Name:") {
-                cell(packageNameField).align(com.intellij.ui.dsl.builder.AlignX.FILL)
-            }
-        }
-        
-        panel.add(form, BorderLayout.NORTH)
-        
+        gbc.gridy = 2
+        targetPanel.add(generateKotlinCb, gbc)
+
+        gbc.gridy = 3
+        targetPanel.add(packageLabel, gbc)
+
+        gbc.gridy = 4
+        targetPanel.add(packageNameField, gbc)
+
+        panel.add(targetPanel, BorderLayout.NORTH)
+
         val summaryPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
         }
         
         val scrollPane = JBScrollPane(summaryPanel).apply {
-            border = JBUI.Borders.customLine(JBColor.border())
+            border = BorderFactory.createTitledBorder("Import Summary")
         }
         panel.add(scrollPane, BorderLayout.CENTER)
 
         if (targetBox.itemCount > 0) {
             targetBox.selectedIndex = 0
         }
-        
+
         return panel
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(previousAction, okAction, cancelAction)
+        return arrayOf(previousAction, importMoreAction, okAction, cancelAction)
     }
 
     private fun updateStep() {
@@ -765,10 +673,12 @@ class ImportLocalFontsDialog(
             layout.show(mainPanel, ImportStep.SELECT_RESOURCES.id)
             setOKButtonText(MyBundle.message("button.next"))
             previousAction.isEnabled = false
+            importMoreAction.isEnabled = false
         } else {
             layout.show(mainPanel, ImportStep.CHOOSE_TARGET.id)
             setOKButtonText(MyBundle.message("button.import_single"))
             previousAction.isEnabled = true
+            importMoreAction.isEnabled = true
             refreshStep2()
         }
     }
@@ -780,7 +690,7 @@ class ImportLocalFontsDialog(
         val summaryPanel = scrollPane.viewport.view as JPanel
         summaryPanel.removeAll()
         
-        val groupedItems = importedItems.filter { it.isSelected }.groupBy { it.name }
+        val groupedItems = importedItems.filter { it.isSelected }.groupBy { it.familyName }
 
         groupedItems.forEach { (name, items) ->
             val groupPanel = createGroupPanel(name, items, isSummary = true) {}
@@ -802,42 +712,49 @@ class ImportLocalFontsDialog(
             updateStep()
         } else {
             performImport()
-            super.doOKAction()
         }
     }
 
-    private fun getFamilyAndVariant(name: String): Pair<String, String> {
-        val cleanName = name.removePrefix("font_")
-        val variants = listOf(
-            "bold_italic", "bolditalic", "bold",
-            "medium_italic", "mediumitalic", "medium",
-            "light_italic", "lightitalic", "light",
-            "thin_italic", "thinitalic", "thin",
-            "italic", "regular"
-        )
+    private fun formatVariantName(variant: String): String = when (variant) {
+        "regular", "400" -> "Regular (400)"
+        "italic", "400italic" -> "Italic (400italic)"
+        "100" -> "Thin (100)"
+        "100italic" -> "Thin Italic (100italic)"
+        "200" -> "Extra Light (200)"
+        "200italic" -> "Extra Light Italic (200italic)"
+        "300" -> "Light (300)"
+        "300italic" -> "Light Italic (300italic)"
+        "500" -> "Medium (500)"
+        "500italic" -> "Medium Italic (500italic)"
+        "600" -> "Semi Bold (600)"
+        "600italic" -> "Semi Bold Italic (600italic)"
+        "700" -> "Bold (700)"
+        "700italic" -> "Bold Italic (700italic)"
+        "800" -> "Extra Bold (800)"
+        "800italic" -> "Extra Bold Italic (800italic)"
+        "900" -> "Black (900)"
+        "900italic" -> "Black Italic (900italic)"
+        else -> variant.replace("italic", " Italic").replaceFirstChar { it.uppercase() }
+    }
 
-        var variant = "regular"
-        var family = cleanName
-
-        for (v in variants) {
-            if (cleanName.endsWith("_$v") || cleanName.endsWith(v)) {
-                variant = v
-                family = if (cleanName.endsWith("_$v")) {
-                    cleanName.substringBeforeLast("_$v")
-                } else {
-                    cleanName.substringBeforeLast(v)
-                }
-                break
-            }
-        }
-
-        val familyName = family.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-        return familyName to variant
+    private fun normalizeLocalFontFilename(family: String, variant: String): String {
+        val cleanFamily = family.lowercase()
+            .replace(Regex("[^a-z0-9]"), "_")
+            .replace(Regex("_+"), "_")
+            .trim('_')
+        val cleanVariant = variant.lowercase()
+            .replace(Regex("[^a-z0-9]"), "_")
+            .replace(Regex("_+"), "_")
+            .trim('_')
+        return "${cleanFamily}_$cleanVariant"
     }
 
     private fun performImport() {
-        val editorText = (targetBox.editor.editorComponent as JTextField).text
-        val (moduleName, baseType, _) = parseTargetText(editorText)
+        val targetModule = targetBox.selectedItem as? Module ?: return
+        val targetDir = File(pathField.text)
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
         
         val itemsToImport = importedItems.filter { it.isSelected }
         if (itemsToImport.isEmpty()) return
@@ -851,42 +768,31 @@ class ImportLocalFontsDialog(
                 indicator.isIndeterminate = false
                 
                 try {
-                    val module = if (moduleName != null) {
-                        ModuleManager.getInstance(project).modules.find { 
-                            it.name == moduleName
-                        }
-                    } else null
-
-                    val resDirVirtual = ResourceUtils.getOrCreateResourceDir(module, project, baseType)
-                        ?: throw IOException("Could not find or create resource directory for '$baseType'")
-                    
-                    val resDirPath = resDirVirtual.path
-                    val targetFolder = java.io.File(resDirPath, "font")
-                    if (!targetFolder.exists()) {
-                        targetFolder.mkdirs()
-                    }
-
                     itemsToImport.forEachIndexed { index, item ->
                         indicator.checkCanceled()
                         indicator.fraction = index.toDouble() / itemsToImport.size
                         indicator.text = "Importing ${item.name}..."
 
-                        val targetFile = java.io.File(targetFolder, "${item.name}.${item.extension}")
+                        val targetFile = java.io.File(targetDir, "${item.name}.${item.extension}")
                         targetFile.writeBytes(item.file.contentsToByteArray())
                     }
                     
-                    VfsUtil.markDirtyAndRefresh(true, true, true, resDirVirtual)
+                    val resDirVirtual = ResourceUtils.getComposeResourcesDir(targetModule) ?: ResourceUtils.getAndroidResourcesDir(targetModule)
+                    if (resDirVirtual != null) {
+                        VfsUtil.markDirtyAndRefresh(true, true, true, resDirVirtual)
+                    }
 
-                    if (generateKotlin && module != null && kotlinDestPath.isNotEmpty()) {
+                    if (generateKotlin && kotlinDestPath.isNotEmpty()) {
                         val fontFamilies = mutableMapOf<String, MutableList<Pair<String, String>>>()
                         itemsToImport.forEach { item ->
                             val finalFileName = "${item.name}.${item.extension}"
-                            val (family, variant) = getFamilyAndVariant(item.name)
+                            val family = ImportedLocalFontItem.getFamilyAndVariant(item.name).first
+                            val variant = item.variant
                             fontFamilies.getOrPut(family) { mutableListOf() }.add(finalFileName to variant)
                         }
                         try {
                             ResourceUtils.generateTypographyFile(
-                                module = module,
+                                module = targetModule,
                                 destinationFolder = File(kotlinDestPath),
                                 packageName = packageName,
                                 fontFamilies = fontFamilies
@@ -899,18 +805,40 @@ class ImportLocalFontsDialog(
                             // Ignore
                         }
                     }
+                    
+                    UIUtil.invokeLaterIfNeeded {
+                        val licenseBanner = MyBundle.message("font.browser.license.banner")
+                        val notice = "Successfully imported ${itemsToImport.size} local font(s).\n\n$licenseBanner"
+                        Messages.showInfoMessage(project, notice, "Import Complete")
+                        
+                        if (isImportAndContinue) {
+                            importedItems.clear()
+                            currentStep = ImportStep.SELECT_RESOURCES
+                            updateStep()
+                            isImportAndContinue = false
+                            
+                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true).apply {
+                                title = "Select More Font Files"
+                                description = "Choose TTF, OTF, or WOFF files to import"
+                                withFileFilter { file ->
+                                    val ext = file.extension?.lowercase() ?: ""
+                                    ext == "ttf" || ext == "otf" || ext == "woff" || ext == "woff2"
+                                }
+                            }
+                            val files = FileChooser.chooseFiles(descriptor, project, null)
+                            if (files.isNotEmpty()) {
+                                val newItems = files.map { ImportedLocalFontItem(it) }
+                                importedItems.addAll(newItems)
+                                refreshStep1(step1Panel)
+                            }
+                        } else {
+                            close(OK_EXIT_CODE)
+                        }
+                    }
                 } catch (e: Exception) {
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))
                     }
-                }
-            }
-
-            override fun onSuccess() {
-                UIUtil.invokeLaterIfNeeded {
-                    val licenseBanner = MyBundle.message("font.browser.license.banner")
-                    Messages.showInfoMessage(project, "Successfully imported ${itemsToImport.size} local font(s).\n\n$licenseBanner", "Import Complete")
-                    close(OK_EXIT_CODE)
                 }
             }
         }

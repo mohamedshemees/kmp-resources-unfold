@@ -78,6 +78,16 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
     private val importedItems = mutableListOf<ImportedGoogleFontItem>()
     private var currentStep = ImportStep.SELECT_FAMILY
     private var applyPrefix = false
+    private var isImportAndContinue = false
+    private val importMoreAction = object : AbstractAction("Import & Choose More") {
+        init {
+            putValue(DEFAULT_ACTION, java.lang.Boolean.FALSE)
+        }
+        override fun actionPerformed(e: java.awt.event.ActionEvent) {
+            isImportAndContinue = true
+            doOKAction()
+        }
+    }
     private val mainPanel = JPanel(CardLayout())
     private lateinit var step1Panel: JPanel
     private lateinit var step2Panel: JPanel
@@ -978,8 +988,25 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                     val notice = "${MyBundle.message("font.browser.import.success", successCount)}\n\n" +
                             "License Info: Licensed under $licenseType.\n" +
                             MyBundle.message("font.browser.license.banner")
-                    Messages.showInfoMessage(project, notice, "Fonts Imported")
-                    close(OK_EXIT_CODE)
+                    
+                    UIUtil.invokeLaterIfNeeded {
+                        Messages.showInfoMessage(project, notice, "Fonts Imported")
+                        if (isImportAndContinue) {
+                            selectedVariantsMap.clear()
+                            selectedVfMap.clear()
+                            currentFamilyVariants.clear()
+                            currentFamilyVf = false
+                            importedItems.clear()
+                            
+                            currentStep = ImportStep.SELECT_FAMILY
+                            updateStep()
+                            fontList.repaint()
+                            updateSelectionsSummary()
+                            isImportAndContinue = false
+                        } else {
+                            close(OK_EXIT_CODE)
+                        }
+                    }
                 } else {
                     Messages.showErrorDialog(project, MyBundle.message("font.browser.import.error"), "Import Failed")
                 }
@@ -1411,11 +1438,13 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 layout.show(mainPanel, ImportStep.SELECT_FAMILY.id)
                 setOKButtonText(MyBundle.message("button.next"))
                 previousAction.isEnabled = false
+                importMoreAction.isEnabled = false
             }
             ImportStep.RENAME_ITEMS -> {
                 layout.show(mainPanel, ImportStep.RENAME_ITEMS.id)
                 setOKButtonText(MyBundle.message("button.next"))
                 previousAction.isEnabled = true
+                importMoreAction.isEnabled = false
                 val panel2 = step2Panel
                 refreshStep2(panel2)
             }
@@ -1423,13 +1452,14 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 layout.show(mainPanel, ImportStep.CHOOSE_TARGET.id)
                 setOKButtonText(MyBundle.message("button.import_single"))
                 previousAction.isEnabled = true
+                importMoreAction.isEnabled = true
                 refreshStep3()
             }
         }
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(previousAction, okAction, cancelAction)
+        return arrayOf(previousAction, importMoreAction, okAction, cancelAction)
     }
 
     override fun dispose() {
