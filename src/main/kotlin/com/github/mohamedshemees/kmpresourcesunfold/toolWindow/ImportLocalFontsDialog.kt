@@ -794,8 +794,7 @@ class ImportLocalFontsDialog(
                     }
                     
                     UIUtil.invokeLaterIfNeeded {
-                        val licenseBanner = MyBundle.message("font.browser.license.banner")
-                        val notice = "Successfully imported ${itemsToImport.size} local font(s).\n\n$licenseBanner"
+                        val notice = "Successfully imported ${itemsToImport.size} local font(s)."
                         Messages.showInfoMessage(project, notice, "Import Complete")
                         close(OK_EXIT_CODE)
                     }

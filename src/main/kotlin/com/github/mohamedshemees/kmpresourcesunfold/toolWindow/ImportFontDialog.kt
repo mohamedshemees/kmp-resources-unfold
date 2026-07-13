@@ -95,6 +95,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
     private val detailsPanel = JPanel()
     private val familyLabel = JBLabel().apply { font = font.deriveFont(Font.BOLD, 18f) }
     private val categoryLabel = JBLabel().apply { foreground = UIUtil.getLabelDisabledForeground() }
+    private val licenseLabel = JBLabel().apply { foreground = UIUtil.getLabelDisabledForeground() }
     private val variantsPanel = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
 
     private val targetBox = ComboBox<Module>()
@@ -569,9 +570,12 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
 
         familyLabel.text = item.family
         categoryLabel.text = "Category: ${item.category}"
+        val licenseType = licenseMap[item.family.lowercase()] ?: "SIL Open Font License 1.1 (OFL)"
+        licenseLabel.text = "License: $licenseType"
 
         detailsPanel.add(familyLabel)
         detailsPanel.add(categoryLabel)
+        detailsPanel.add(licenseLabel)
         detailsPanel.add(Box.createVerticalStrut(15))
 
         // Populate temporary variables from committed selections, or default to regular style
@@ -981,15 +985,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 }
 
                 if (successCount > 0) {
-                    val selectedItem = fontList.selectedValue
-                    val licenseType = if (selectedItem != null) {
-                        licenseMap[selectedItem.family.lowercase()] ?: "SIL Open Font License 1.1 (OFL)"
-                    } else "SIL Open Font License 1.1 (OFL)"
-                    
-                    val notice = "${MyBundle.message("font.browser.import.success", successCount)}\n\n" +
-                            "License Info: Licensed under $licenseType.\n" +
-                            MyBundle.message("font.browser.license.banner")
-                    
+                    val notice = MyBundle.message("font.browser.import.success", successCount)
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showInfoMessage(project, notice, "Fonts Imported")
                         close(OK_EXIT_CODE)

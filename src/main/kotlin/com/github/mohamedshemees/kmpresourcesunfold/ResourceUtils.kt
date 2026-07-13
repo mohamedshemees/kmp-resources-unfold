@@ -174,14 +174,6 @@ object ResourceUtils {
     }
 
     fun getModuleRootDir(module: Module): java.io.File? {
-        val path = module.moduleFilePath
-        val imlFile = java.io.File(path)
-        if (imlFile.exists()) {
-            val parent = imlFile.parentFile
-            if (parent != null && parent.name != ".idea" && parent.name != "modules") {
-                return parent
-            }
-        }
         val contentRoots = ModuleRootManager.getInstance(module).contentRoots
         if (contentRoots.isNotEmpty()) {
             return contentRoots.map { java.io.File(it.path) }.minByOrNull { it.absolutePath.length }
