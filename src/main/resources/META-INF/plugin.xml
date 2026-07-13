@@ -22,6 +22,9 @@
         <fileEditorProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.VectorPreviewProvider"
                             order="first, before text-editor"/>
 
+        <fileEditorProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.toolWindow.FontPreviewProvider"
+                            order="first"/>
+
         <codeInsight.lineMarkerProvider language="XML"
                                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourceLocalizationLineMarkerProvider"/>
         <psi.referenceContributor language="XML"

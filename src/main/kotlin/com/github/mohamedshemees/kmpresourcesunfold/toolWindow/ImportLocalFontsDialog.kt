@@ -153,17 +153,6 @@ class ImportLocalFontsDialog(
     private val kotlinPathField = JTextField()
     private val packageNameField = JTextField()
 
-    private var isImportAndContinue = false
-    private val importMoreAction = object : AbstractAction("Import & Choose More") {
-        init {
-            putValue(DEFAULT_ACTION, java.lang.Boolean.FALSE)
-        }
-        override fun actionPerformed(e: java.awt.event.ActionEvent) {
-            isImportAndContinue = true
-            doOKAction()
-        }
-    }
-
     private val previousAction = object : AbstractAction(MyBundle.message("button.previous")) {
         override fun actionPerformed(e: java.awt.event.ActionEvent?) {
             currentStep = ImportStep.SELECT_RESOURCES
@@ -664,7 +653,7 @@ class ImportLocalFontsDialog(
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(previousAction, importMoreAction, okAction, cancelAction)
+        return arrayOf(previousAction, okAction, cancelAction)
     }
 
     private fun updateStep() {
@@ -673,12 +662,10 @@ class ImportLocalFontsDialog(
             layout.show(mainPanel, ImportStep.SELECT_RESOURCES.id)
             setOKButtonText(MyBundle.message("button.next"))
             previousAction.isEnabled = false
-            importMoreAction.isEnabled = false
         } else {
             layout.show(mainPanel, ImportStep.CHOOSE_TARGET.id)
             setOKButtonText(MyBundle.message("button.import_single"))
             previousAction.isEnabled = true
-            importMoreAction.isEnabled = true
             refreshStep2()
         }
     }
@@ -810,30 +797,7 @@ class ImportLocalFontsDialog(
                         val licenseBanner = MyBundle.message("font.browser.license.banner")
                         val notice = "Successfully imported ${itemsToImport.size} local font(s).\n\n$licenseBanner"
                         Messages.showInfoMessage(project, notice, "Import Complete")
-                        
-                        if (isImportAndContinue) {
-                            importedItems.clear()
-                            currentStep = ImportStep.SELECT_RESOURCES
-                            updateStep()
-                            isImportAndContinue = false
-                            
-                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true).apply {
-                                title = "Select More Font Files"
-                                description = "Choose TTF, OTF, or WOFF files to import"
-                                withFileFilter { file ->
-                                    val ext = file.extension?.lowercase() ?: ""
-                                    ext == "ttf" || ext == "otf" || ext == "woff" || ext == "woff2"
-                                }
-                            }
-                            val files = FileChooser.chooseFiles(descriptor, project, null)
-                            if (files.isNotEmpty()) {
-                                val newItems = files.map { ImportedLocalFontItem(it) }
-                                importedItems.addAll(newItems)
-                                refreshStep1(step1Panel)
-                            }
-                        } else {
-                            close(OK_EXIT_CODE)
-                        }
+                        close(OK_EXIT_CODE)
                     }
                 } catch (e: Exception) {
                     UIUtil.invokeLaterIfNeeded {

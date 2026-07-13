@@ -39,15 +39,23 @@ https://github.com/user-attachments/assets/34a81c21-15e3-469e-ba78-acd53de2c3d9
     * **Multi-Density Support**: Auto-detects and groups images by density (e.g., `image@2x.png` -> `drawable-xhdpi/image.png`).
     * **Smart Prefixing**: Optionally applies standard `ic_` (vector) or `img_` (image) prefixes.
     * **Live Previews**: Preview assets and their exact target paths before importing.
+    * **"Import & Choose More" Action**: Batch-import currently selected assets and immediately reset selection queues/file choosers to continue importing assets in a single run.
 * **Instant Previews**: High-fidelity rendering of vectors with support for gradients and transparency.
-* **Design Tab**: A specialized file editor tab for Vector assets featuring:
-    * **Smooth Zoom**: Precise control over preview size.
-    * **Reset to 100%**: Native "Actual Size" button for accurate scaling.
-    * **Auto-refresh**: Live preview updates as soon as you save file changes.
-* **Smart Interaction**:
+* **Design & Font Preview Tabs**:
+    * **Vector Assets**: A specialized tab with smooth zoom, actual size reset, and auto-refresh on save.
+    * **Font Assets**: A dedicated interactive preview tab for `.ttf` files featuring:
+        * **Flexible Sizing**: Smoothly adjust font size from 8pt to 120pt.
+        * **Synthetic Styling**: Instant Bold/Italic formatting switches.
+        * **Specimen Area**: Type custom text and see it instantly rendered.
+        * **Waterfall View**: Inspect how the font scales at standard typographic sizes.
+        * **Character Map**: View the complete printable Basic Latin character grid and Unicode code points.
+        * **Details Pane**: Displays the font's metadata (Name, Family, Format, File Size).
+* **Smart Interaction & Editor Previews**:
     * **Single Click**: Copy the resource path to clipboard with an instant notification.
     * **Double Click**: Open the source file directly in the editor.
-* **Live Filtering**: Filter assets by category (Vectors/Images) with real-time counts.
+    * **Instant Hovers**: Hover over `Res.drawable.xxx`, `Res.string.xxx`, or `Res.font.xxx` to see an image preview, localized translations, or font specimen styled in the actual typeface.
+    * **Gutter Previews**: Gutter icons displaying styled "Aa" previews using the typeface and weight of the matching font asset. Click the gutter icon to swap resource references on the fly.
+* **Live Filtering**: Filter assets by category (Vectors/Images/Fonts/Strings) with real-time counts.
 * **Smart Localization Support (Strings)**:
     * **Missing Translation Warnings**: Instantly spot strings that are missing translations across your `values` directories.
     * **Quick Navigation**: Use <kbd>Ctrl</kbd> + <kbd>Click</kbd> (or <kbd>Cmd</kbd> + <kbd>Click</kbd>) on a string key to instantly navigate between its translations.

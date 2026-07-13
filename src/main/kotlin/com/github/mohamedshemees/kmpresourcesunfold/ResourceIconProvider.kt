@@ -24,8 +24,13 @@ object ResourceIconProvider {
         val cacheKey = "${file.path}_$size"
         return iconCache.getOrPut(cacheKey) {
             try {
-                val baseIcon = createIcon(file, size) ?: UIManager.getIcon("FileView.fileIcon")
-                CheckerboardIcon(baseIcon, size, size)
+                val ext = ResourceExtension.fromExtension(file.extension)
+                if (ext != null && ResourceExtension.fontExtensions.contains(ext)) {
+                    FontFileIcon(file, size)
+                } else {
+                    val baseIcon = createIcon(file, size) ?: UIManager.getIcon("FileView.fileIcon")
+                    CheckerboardIcon(baseIcon, size, size)
+                }
             } catch (e: Throwable) {
                 CheckerboardIcon(UIManager.getIcon("FileView.fileIcon"), size, size)
             }
@@ -150,5 +155,57 @@ object ResourceIconProvider {
         } catch (e: Exception) {
             return null
         }
+    }
+
+    class FontFileIcon(private val file: VirtualFile, private val size: Int) : Icon {
+        private var loadedFont: java.awt.Font? = null
+        private var isFontLoaded = false
+
+        private fun getFontToUse(c: Component?): java.awt.Font {
+            if (!isFontLoaded) {
+                isFontLoaded = true
+                try {
+                    loadedFont = file.inputStream.use { stream ->
+                        java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, stream).deriveFont(java.awt.Font.BOLD, (size * 0.7f))
+                    }
+                } catch (e: Exception) {
+                    // Ignore, fallback to system
+                }
+            }
+            return loadedFont ?: c?.font?.deriveFont(java.awt.Font.BOLD, (size * 0.7f)) ?: java.awt.Font("Serif", java.awt.Font.BOLD, (size * 0.7f).toInt())
+        }
+
+        override fun paintIcon(c: Component?, g: java.awt.Graphics, x: Int, y: Int) {
+            val g2d = g.create() as Graphics2D
+            try {
+                g2d.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+
+                val arc = (size * 0.25).toInt()
+                g2d.color = JBColor(java.awt.Color(0xEAEAEA), java.awt.Color(0x3B3F42))
+                g2d.fillRoundRect(x + 1, y + 1, size - 2, size - 2, arc, arc)
+                
+                g2d.color = JBColor(java.awt.Color(0xD0D0D0), java.awt.Color(0x2A2C2E))
+                g2d.drawRoundRect(x + 1, y + 1, size - 2, size - 2, arc, arc)
+
+                val fontToUse = getFontToUse(c)
+                g2d.font = fontToUse
+                g2d.color = JBColor(java.awt.Color(0x569CD6), java.awt.Color(0x569CD6))
+
+                val text = "F"
+                val fm = g2d.fontMetrics
+                val textWidth = fm.stringWidth(text)
+                val textHeight = fm.ascent
+                
+                val textX = x + (size - textWidth) / 2
+                val textY = y + (size + textHeight) / 2 - 2
+                g2d.drawString(text, textX, textY)
+            } finally {
+                g2d.dispose()
+            }
+        }
+
+        override fun getIconWidth(): Int = size
+        override fun getIconHeight(): Int = size
     }
 }

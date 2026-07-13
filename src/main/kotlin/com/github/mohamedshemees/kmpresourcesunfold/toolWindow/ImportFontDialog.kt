@@ -7,6 +7,7 @@ import com.github.mohamedshemees.kmpresourcesunfold.font.GoogleWebfontItem
 import com.github.mohamedshemees.kmpresourcesunfold.settings.FontSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
@@ -78,16 +79,6 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
     private val importedItems = mutableListOf<ImportedGoogleFontItem>()
     private var currentStep = ImportStep.SELECT_FAMILY
     private var applyPrefix = false
-    private var isImportAndContinue = false
-    private val importMoreAction = object : AbstractAction("Import & Choose More") {
-        init {
-            putValue(DEFAULT_ACTION, java.lang.Boolean.FALSE)
-        }
-        override fun actionPerformed(e: java.awt.event.ActionEvent) {
-            isImportAndContinue = true
-            doOKAction()
-        }
-    }
     private val mainPanel = JPanel(CardLayout())
     private lateinit var step1Panel: JPanel
     private lateinit var step2Panel: JPanel
@@ -913,7 +904,17 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
             val importedFontFiles = mutableListOf<Triple<String, String, String>>()
 
             itemsToImport.forEachIndexed { index, item ->
-                if (item.variant == "variable") {
+                if (item.localFile != null) {
+                    try {
+                        val destName = "${item.name}.${item.extension}"
+                        val dest = File(targetDir, destName)
+                        dest.writeBytes(item.localFile.contentsToByteArray())
+                        successCount++
+                        importedFontFiles.add(Triple(item.familyName, destName, item.variant))
+                    } catch (e: IOException) {
+                        failCount++
+                    }
+                } else if (item.variant == "variable") {
                     val detailed = FontCacheManager.fetchVariableFontDetails(apiKey, item.familyName)
                     val vfUrl = detailed?.files?.get("regular") ?: detailed?.files?.values?.firstOrNull()
                     if (vfUrl != null) {
@@ -932,7 +933,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                     } else failCount++
                 } else {
                     val staticUrl = item.downloadUrl
-                    if (staticUrl.isNotEmpty()) {
+                    if (staticUrl != null && staticUrl.isNotEmpty()) {
                         val downloaded = FontCacheManager.downloadFontFile(staticUrl, item.familyName, item.variant)
                         if (downloaded != null) {
                             try {
@@ -991,21 +992,7 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                     
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showInfoMessage(project, notice, "Fonts Imported")
-                        if (isImportAndContinue) {
-                            selectedVariantsMap.clear()
-                            selectedVfMap.clear()
-                            currentFamilyVariants.clear()
-                            currentFamilyVf = false
-                            importedItems.clear()
-                            
-                            currentStep = ImportStep.SELECT_FAMILY
-                            updateStep()
-                            fontList.repaint()
-                            updateSelectionsSummary()
-                            isImportAndContinue = false
-                        } else {
-                            close(OK_EXIT_CODE)
-                        }
+                        close(OK_EXIT_CODE)
                     }
                 } else {
                     Messages.showErrorDialog(project, MyBundle.message("font.browser.import.error"), "Import Failed")
@@ -1041,6 +1028,35 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                         }
                     }
                     add(deleteSelected)
+
+                    val importMore = JButton(MyBundle.message("button.importMore")).apply {
+                        putClientProperty("JButton.buttonType", "link")
+                        addActionListener {
+                            val descriptor = FileChooserDescriptor(true, false, false, false, false, true).apply {
+                                title = "Select Font Files"
+                                withFileFilter { file ->
+                                    val ext = file.extension?.lowercase() ?: ""
+                                    ext == "ttf" || ext == "otf"
+                                }
+                            }
+                            val files = FileChooser.chooseFiles(descriptor, project, null)
+                            files.forEach { file ->
+                                val (family, variant) = ImportedLocalFontItem.getFamilyAndVariant(file.nameWithoutExtension)
+                                if (importedItems.none { it.localFile == file }) {
+                                    importedItems.add(ImportedGoogleFontItem(
+                                        familyName = family,
+                                        variant = variant,
+                                        downloadUrl = null,
+                                        originalName = file.nameWithoutExtension,
+                                        isSelected = true,
+                                        localFile = file
+                                    ).apply { applyPrefix(applyPrefix) })
+                                }
+                            }
+                            refreshStep2(panel)
+                        }
+                    }
+                    add(importMore)
                 }
                 add(rightActionsPanel, BorderLayout.EAST)
             }
@@ -1438,13 +1454,11 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 layout.show(mainPanel, ImportStep.SELECT_FAMILY.id)
                 setOKButtonText(MyBundle.message("button.next"))
                 previousAction.isEnabled = false
-                importMoreAction.isEnabled = false
             }
             ImportStep.RENAME_ITEMS -> {
                 layout.show(mainPanel, ImportStep.RENAME_ITEMS.id)
                 setOKButtonText(MyBundle.message("button.next"))
                 previousAction.isEnabled = true
-                importMoreAction.isEnabled = false
                 val panel2 = step2Panel
                 refreshStep2(panel2)
             }
@@ -1452,14 +1466,13 @@ class ImportFontDialog(private val project: Project) : DialogWrapper(project) {
                 layout.show(mainPanel, ImportStep.CHOOSE_TARGET.id)
                 setOKButtonText(MyBundle.message("button.import_single"))
                 previousAction.isEnabled = true
-                importMoreAction.isEnabled = true
                 refreshStep3()
             }
         }
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(previousAction, importMoreAction, okAction, cancelAction)
+        return arrayOf(previousAction, okAction, cancelAction)
     }
 
     override fun dispose() {
@@ -1551,9 +1564,10 @@ class FontApiKeyDialog(project: Project, private val initialKey: String?) : Dial
 data class ImportedGoogleFontItem(
     val familyName: String,
     val variant: String,
-    val downloadUrl: String,
+    val downloadUrl: String?,
     private val originalName: String,
-    var isSelected: Boolean = true
+    var isSelected: Boolean = true,
+    val localFile: com.intellij.openapi.vfs.VirtualFile? = null
 ) {
     var name: String = originalName
     var customPrefixApplied: String = ""

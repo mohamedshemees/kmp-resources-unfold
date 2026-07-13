@@ -14,6 +14,13 @@
     - Added a global "Select All" checkbox to toggle selection of all assets instantly.
     - Added a "Custom Prefix" input field with an "Apply" button to batch-apply custom prefixes to selected assets.
     - Added a "Remove Selected" button on the top-right of the import dialog to batch-remove all selected assets from the import list.
+- **Built-in Font Preview Editor**: Added a dedicated interactive editor tab for `.ttf` files featuring zoom sliders, synthetic styling checkboxes, interactive custom text inputs, size waterfall previews, a basic Latin character map, and metadata cards.
+- **Inline Font Previews & Hovers**:
+    - Added styled "Aa" gutter preview icons that render using the actual font style and weight.
+    - Added high-fidelity hover documentation tooltips for `Res.font.xxx` references, styling specimen text dynamically with the loaded font file.
+- **Gutter Font Swapping**: Click the gutter icon on any `Res.font.xxx` reference to search and swap font assets instantly.
+- **"Import & Choose More" Action**: Added a custom action button to dialogs to batch-import currently selected assets and immediately reset the selection queues to continue importing assets in a single run.
+- **Custom Font File Icons**: Modernized file tree rendering by creating custom **"F"** file icon badges for font assets.
 - **Robust Prefix Handling**:
     - Optimized prefixing logic to prevent duplicate prefixes (e.g., `tes_imag_tes_imag_...`) when clicking Apply multiple times.
     - Correctly handle prefix ordering and combinations of standard and custom prefixes.
