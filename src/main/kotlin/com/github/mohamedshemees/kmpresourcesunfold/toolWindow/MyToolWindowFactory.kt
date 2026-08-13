@@ -74,6 +74,16 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         val fileToModuleMap = mutableMapOf<VirtualFile, String>()
         var availableModules = listOf<String>()
 
+        data class KotlinVectorItem(
+            val iconName: String,
+            val file: VirtualFile,
+            val xmlContent: String,
+            val moduleName: String,
+            val icon: Icon
+        )
+
+        var allKotlinVectorItems = listOf<KotlinVectorItem>()
+
         val refreshData = {
             ResourceIconProvider.clearCache()
             allFiles = KmpResourceScanner.findComposeDrawables(project)
@@ -85,6 +95,23 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 fileToModuleMap[file] = clean
             }
             
+            val ktItems = mutableListOf<KotlinVectorItem>()
+            allFiles.filter { it.extension?.lowercase() == "kt" }.forEach { file ->
+                try {
+                    val content = com.intellij.openapi.vfs.VfsUtilCore.loadText(file)
+                    val icons = KotlinImageVectorParser.parseKotlinImageVectors(content)
+                    val moduleName = fileToModuleMap[file] ?: "Unknown"
+                    icons.forEach { iconItem ->
+                        val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(64)
+                        val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, iconItem.xmlContent, StringBuilder())
+                        val baseIcon = img?.let { ImageIcon(it) } ?: UIManager.getIcon("FileView.fileIcon")
+                        val previewIcon = ResourceIconProvider.CheckerboardIcon(baseIcon, 64, 64)
+                        ktItems.add(KotlinVectorItem(iconItem.name, file, iconItem.xmlContent, moduleName, previewIcon))
+                    }
+                } catch (_: Throwable) {}
+            }
+            allKotlinVectorItems = ktItems
+
             allStringResources = StringResourceProcessor.findStringResources(project, allFiles, fileToModuleMap)
             availableModules = fileToModuleMap.values.distinct().sorted()
         }
@@ -450,7 +477,8 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             val allModulesStr = MyBundle.message("item.allModules")
             val selectedModule = (moduleBox.selectedItem as? ModuleOption)?.name ?: ""
 
-            val filteredFiles = allFiles.filter { file ->
+            val nonKtFiles = allFiles.filter { it.extension?.lowercase() != "kt" }
+            val filteredFiles = nonKtFiles.filter { file ->
                 val ext = ResourceExtension.fromExtension(file.extension)
                 val moduleName = fileToModuleMap[file] ?: "Unknown"
                 val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
@@ -464,6 +492,14 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 val matchesSearch = file.name.lowercase().contains(lowerSearch)
                 matchesModule && matchesSearch && matchesType
             }
+
+            val filteredKotlinVectors = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.VECTORS) {
+                allKotlinVectorItems.filter { item ->
+                    val matchesModule = selectedModule == allModulesStr || item.moduleName == selectedModule
+                    val matchesSearch = item.iconName.lowercase().contains(lowerSearch) || item.file.name.lowercase().contains(lowerSearch)
+                    matchesModule && matchesSearch
+                }
+            } else emptyList()
 
             val filteredStrings = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
                 allStringResources.filter { resource ->
@@ -482,6 +518,13 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     file.name == ResourceConstants.STRINGS_FILE && matchesModule && matchesSearch
                 }
             } else emptyList()
+
+            if (filteredKotlinVectors.isNotEmpty()) {
+                filteredKotlinVectors.sortedBy { it.iconName }.forEach { item ->
+                    resourceModel.addElement(ResourceParent(item.iconName, item.icon, item.file))
+                    resourceModel.addElement(ResourceChild(item.file, "Compose ImageVector", item.moduleName))
+                }
+            }
 
             if (filteredFiles.isNotEmpty()) {
                 val densityOrder = listOf("Default", "LDPI", "MDPI", "HDPI", "XHDPI", "XXHDPI", "XXXHDPI")
@@ -511,7 +554,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             }
 
-            val totalResourcesCount = filteredFiles.size + filteredStrings.size + filteredStringsFiles.size
+            val totalResourcesCount = filteredFiles.size + filteredStrings.size + filteredStringsFiles.size + filteredKotlinVectors.size
             chips.forEach { it.updateCount(totalResourcesCount) }
         }
 

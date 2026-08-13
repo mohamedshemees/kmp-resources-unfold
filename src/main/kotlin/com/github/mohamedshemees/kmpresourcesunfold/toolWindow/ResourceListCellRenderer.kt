@@ -43,7 +43,7 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                 label.foreground = JBColor.GRAY
                 label.font = label.font.deriveFont(11f)
                 
-                subLabel.text = value.moduleName
+                subLabel.text = if (value.file.extension?.lowercase() == "kt") "${value.moduleName} • ${value.file.name}" else value.moduleName
                 subLabel.foreground = JBColor.LIGHT_GRAY
                 subLabel.font = subLabel.font.deriveFont(9f)
                 

@@ -18,6 +18,17 @@ class VectorPreviewProvider : FileEditorProvider, DumbAware {
         val ext = file.extension?.lowercase()
         if (file.name == ResourceConstants.STRINGS_FILE) return false
         
+        if (ext == ResourceExtension.SVG.extension) return true
+
+        if (ext == ResourceExtension.KT.extension) {
+            try {
+                val content = String(file.contentsToByteArray(), Charsets.UTF_8)
+                return com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.isKotlinImageVectorFile(content)
+            } catch (_: Throwable) {
+                return false
+            }
+        }
+        
         return ext == ResourceExtension.XML.extension && 
                 (file.path.contains(ResourceConstants.DRAWABLE_DIR) || 
                  file.path.contains(ResourceConstants.COMPOSE_RESOURCES_DIR))

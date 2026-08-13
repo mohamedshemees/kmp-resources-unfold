@@ -24,44 +24,90 @@ import javax.swing.JList
 
 class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
 
+    private val vectorCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>>>()
+
+    private fun findKotlinVectorInProject(
+        project: com.intellij.openapi.project.Project, 
+        iconName: String
+    ): Pair<VirtualFile, com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>? {
+        val allFiles = KmpResourceScanner.findComposeDrawables(project)
+        for (file in allFiles) {
+            if (file.extension?.lowercase() == "kt") {
+                val modStamp = file.modificationStamp
+                val cached = vectorCache[file.path]
+                val icons = if (cached != null && cached.first == modStamp) {
+                    cached.second
+                } else {
+                    try {
+                        val content = com.intellij.openapi.vfs.VfsUtilCore.loadText(file)
+                        val parsed = com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.parseKotlinImageVectors(content)
+                        vectorCache[file.path] = Pair(modStamp, parsed)
+                        parsed
+                    } catch (_: Throwable) { emptyList() }
+                }
+                val match = icons.find { it.name == iconName }
+                if (match != null) return Pair(file, match)
+            }
+        }
+        return null
+    }
+
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
-        if (element !is KtNameReferenceExpression) return null
+        // Quick guard clause: Only inspect leaf elements
+        if (element.firstChild != null) return null
 
         val text = element.text
-        val parent = element.parent
+        if (text.isBlank() || text.length < 2) return null
+
+        val parent = element.parent ?: return null
+        val grandParent = parent.parent
+
+        val nameRef = when (element) {
+            is KtNameReferenceExpression -> element
+            else -> parent as? KtNameReferenceExpression
+        }
+        val nameRefParent = nameRef?.parent ?: grandParent
 
         // 1. Handle Drawables (Res.drawable.key)
-        if (parent is KtDotQualifiedExpression && parent.text.startsWith("Res.drawable.")) {
-            if (parent.selectorExpression == element) {
+        if (nameRefParent is KtDotQualifiedExpression && nameRefParent.text.startsWith("Res.drawable.")) {
+            if (nameRefParent.selectorExpression == nameRef || nameRefParent.selectorExpression == element) {
                 val project = element.project
                 val allFiles = KmpResourceScanner.findComposeDrawables(project)
                 val matchingFile = allFiles.find { it.nameWithoutExtension == text } ?: return null
                 val icon = ResourceIconProvider.getIcon(matchingFile, 18)
 
                 return createMarker(element, icon, "Click to swap drawable: $text") { e, elt ->
-                    if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
-                        showSwapPopup(e, elt.parent as KtDotQualifiedExpression)
+                    val targetRef = when (elt) {
+                        is KtNameReferenceExpression -> elt
+                        else -> elt.parent as? KtNameReferenceExpression
+                    }
+                    if (targetRef != null && targetRef.parent is KtDotQualifiedExpression) {
+                        showSwapPopup(e, targetRef.parent as KtDotQualifiedExpression)
                     }
                 }
             }
         }
 
         // 2. Handle Strings (Res.string.key)
-        if (parent is KtDotQualifiedExpression && parent.text.startsWith("Res.string.")) {
-            if (parent.selectorExpression == element) {
+        if (nameRefParent is KtDotQualifiedExpression && nameRefParent.text.startsWith("Res.string.")) {
+            if (nameRefParent.selectorExpression == nameRef || nameRefParent.selectorExpression == element) {
                 val key = text
                 val icon = com.intellij.icons.AllIcons.Actions.Preview
                 return createMarker(element, icon, "Click to swap string: $key") { e, elt ->
-                    if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
-                        showStringSwapPopup(e, elt.parent as KtDotQualifiedExpression)
+                    val targetRef = when (elt) {
+                        is KtNameReferenceExpression -> elt
+                        else -> elt.parent as? KtNameReferenceExpression
+                    }
+                    if (targetRef != null && targetRef.parent is KtDotQualifiedExpression) {
+                        showStringSwapPopup(e, targetRef.parent as KtDotQualifiedExpression)
                     }
                 }
             }
         }
 
         // 3. Handle Fonts (Res.font.key)
-        if (parent is KtDotQualifiedExpression && parent.text.startsWith("Res.font.")) {
-            if (parent.selectorExpression == element) {
+        if (nameRefParent is KtDotQualifiedExpression && nameRefParent.text.startsWith("Res.font.")) {
+            if (nameRefParent.selectorExpression == nameRef || nameRefParent.selectorExpression == element) {
                 val key = text
                 val project = element.project
                 val allFiles = KmpResourceScanner.findComposeFonts(project)
@@ -73,9 +119,60 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                 val tooltip = "<html><body style='padding: 5px; margin: 0;'><span style=\"$fontStyle font-size: 16px;\">AaBbCc - $fontName</span></body></html>"
 
                 return createMarker(element, icon, tooltip) { e, elt ->
-                    if (elt is KtNameReferenceExpression && elt.parent is KtDotQualifiedExpression) {
-                        showFontSwapPopup(e, elt.parent as KtDotQualifiedExpression)
+                    val targetRef = when (elt) {
+                        is KtNameReferenceExpression -> elt
+                        else -> elt.parent as? KtNameReferenceExpression
                     }
+                    if (targetRef != null && targetRef.parent is KtDotQualifiedExpression) {
+                        showFontSwapPopup(e, targetRef.parent as KtDotQualifiedExpression)
+                    }
+                }
+            }
+        }
+
+        // 4. Handle Kotlin ImageVector property definitions (val Settings: ImageVector)
+        if (parent is org.jetbrains.kotlin.psi.KtProperty && parent.nameIdentifier == element) {
+            val typeText = parent.typeReference?.text
+            val isImageVectorProp = typeText == "ImageVector" || parent.text.contains("ImageVector.Builder")
+            if (isImageVectorProp) {
+                val file = element.containingFile?.virtualFile
+                if (file != null) {
+                    val (ktFile, matchedIcon) = findKotlinVectorInProject(element.project, text) ?: Pair(file, null)
+                    val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(18)
+                    val img = matchedIcon?.let { com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, it.xmlContent, StringBuilder()) }
+                    val icon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(ktFile, 18)
+                    return createMarker(element, icon, "Kotlin ImageVector: $text") { _, _ -> }
+                }
+            }
+        }
+
+        // 5. Handle Vector callers e.g. rememberVectorPainter(Settings), Icon(Settings), rememberVectorPainter(image = Settings)
+        val valueArg = (parent as? org.jetbrains.kotlin.psi.KtValueArgument)
+            ?: (grandParent as? org.jetbrains.kotlin.psi.KtValueArgument)
+            ?: (nameRefParent as? org.jetbrains.kotlin.psi.KtValueArgument)
+
+        val callExpr = (valueArg?.parent?.parent as? org.jetbrains.kotlin.psi.KtCallExpression)
+            ?: (valueArg?.parent as? org.jetbrains.kotlin.psi.KtCallExpression)
+            ?: (grandParent as? org.jetbrains.kotlin.psi.KtCallExpression)
+            ?: (parent as? org.jetbrains.kotlin.psi.KtCallExpression)
+
+        val calleeText = callExpr?.calleeExpression?.text
+        val isPainterOrIconCall = calleeText == "rememberVectorPainter" || calleeText == "Icon" || calleeText == "Image" || calleeText == "painterResource"
+
+        if (isPainterOrIconCall || valueArg != null || parent is org.jetbrains.kotlin.psi.KtProperty) {
+            val project = element.project
+            val (ktFile, matchedIcon) = findKotlinVectorInProject(project, text) ?: return null
+            val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(18)
+            val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, matchedIcon.xmlContent, StringBuilder())
+            val icon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(ktFile, 18)
+
+            return createMarker(element, icon, "Click to swap vector painter: $text") { e, elt ->
+                val targetRef = when (elt) {
+                    is KtNameReferenceExpression -> elt
+                    else -> elt.parent as? KtNameReferenceExpression
+                }
+                if (targetRef != null) {
+                    showVectorSwapPopup(e, targetRef)
                 }
             }
         }
@@ -232,6 +329,66 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                 }
             }
             .setNamerForFiltering { it.nameWithoutExtension }
+            .createPopup()
+            .show(com.intellij.ui.awt.RelativePoint(e))
+    }
+
+    private fun showVectorSwapPopup(e: MouseEvent, expression: KtNameReferenceExpression) {
+        val project = expression.project
+        val module = ModuleUtilCore.findModuleForPsiElement(expression) ?: return
+        val allFiles = KmpResourceScanner.findComposeDrawables(project)
+        val moduleFiles = allFiles.filter { file ->
+            ModuleUtilCore.findModuleForFile(file, project) == module
+        }
+
+        data class VectorOption(val name: String, val file: VirtualFile, val icon: javax.swing.Icon)
+
+        val options = mutableListOf<VectorOption>()
+        moduleFiles.forEach { file ->
+            if (file.extension?.lowercase() == "kt") {
+                try {
+                    val content = String(file.contentsToByteArray(), Charsets.UTF_8)
+                    val icons = com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.parseKotlinImageVectors(content)
+                    icons.forEach { iconItem ->
+                        val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(24)
+                        val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, iconItem.xmlContent, StringBuilder())
+                        val swingIcon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(file, 24)
+                        options.add(VectorOption(iconItem.name, file, swingIcon))
+                    }
+                } catch (_: Throwable) {}
+            } else {
+                options.add(VectorOption(file.nameWithoutExtension, file, ResourceIconProvider.getIcon(file, 24)))
+            }
+        }
+
+        if (options.isEmpty()) return
+
+        val sortedOptions = options.sortedBy { it.name }
+        val list = JBList(sortedOptions)
+        list.cellRenderer = object : DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(
+                list: JList<*>?, value: Any?, index: Int, isSelected: Boolean, cellHasFocus: Boolean
+            ): Component {
+                val label = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus) as javax.swing.JLabel
+                val option = value as VectorOption
+                label.text = option.name
+                label.icon = option.icon
+                return label
+            }
+        }
+
+        JBPopupFactory.getInstance()
+            .createPopupChooserBuilder(sortedOptions)
+            .setTitle("Swap Vector / ImageVector")
+            .setRenderer(list.cellRenderer)
+            .setItemChosenCallback { selectedOption ->
+                WriteCommandAction.runWriteCommandAction(project) {
+                    val factory = KtPsiFactory(project)
+                    val newExpression = factory.createExpression(selectedOption.name)
+                    expression.replace(newExpression)
+                }
+            }
+            .setNamerForFiltering { it.name }
             .createPopup()
             .show(com.intellij.ui.awt.RelativePoint(e))
     }

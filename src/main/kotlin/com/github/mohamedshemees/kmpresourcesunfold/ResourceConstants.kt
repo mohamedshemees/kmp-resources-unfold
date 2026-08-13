@@ -10,14 +10,15 @@ enum class ResourceExtension(val extension: String) {
     TTF("ttf"),
     OTF("otf"),
     WOFF("woff"),
-    WOFF2("woff2");
+    WOFF2("woff2"),
+    KT("kt");
 
     companion object {
         fun fromExtension(ext: String?): ResourceExtension? =
             entries.find { it.extension == ext?.lowercase() }
 
         val imageExtensions = setOf(PNG, WEBP, JPG, JPEG)
-        val vectorExtensions = setOf(XML, SVG)
+        val vectorExtensions = setOf(XML, SVG, KT)
         val fontExtensions = setOf(TTF, OTF, WOFF, WOFF2)
         val allExtensions = entries.map { it.extension }.toSet()
     }

@@ -12,7 +12,14 @@ class ResourceFileIconProvider : IconProvider(), DumbAware {
             val virtualFile = element.virtualFile ?: return null
             val ext = virtualFile.extension?.lowercase()
             
-            if (ResourceExtension.allExtensions.contains(ext)) {
+            if (ext == "kt") {
+                try {
+                    val content = String(virtualFile.contentsToByteArray(), Charsets.UTF_8)
+                    if (KotlinImageVectorParser.isKotlinImageVectorFile(content)) {
+                        return ResourceIconProvider.getIcon(virtualFile, 16)
+                    }
+                } catch (_: Throwable) {}
+            } else if (ResourceExtension.allExtensions.contains(ext)) {
                 // Return a small 16x16 preview for the file tree
                 return ResourceIconProvider.getIcon(virtualFile, 16)
             }

@@ -43,6 +43,7 @@ data class ImportedDrawableItem(
     private val originalName: String = file.nameWithoutExtension,
     var doNotImport: Boolean = false,
     var convertSvg: Boolean = file.extension?.lowercase() == ResourceExtension.SVG.extension,
+    var convertToKotlinImageVector: Boolean = false,
     var isSelected: Boolean = true
 ) {
     private val densityData = Density.fromFileName(originalName)
@@ -55,7 +56,11 @@ data class ImportedDrawableItem(
     var customPrefixApplied: String = ""
 
     val extension: String
-        get() = if (convertSvg) "xml" else file.extension ?: ""
+        get() = when {
+            convertToKotlinImageVector -> "kt"
+            convertSvg -> "xml"
+            else -> file.extension ?: ""
+        }
 
     fun applyPrefix(enabled: Boolean) {
         val stdPrefix = when (file.extension?.lowercase()) {

@@ -441,19 +441,34 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(infoLabel)
 
-            if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension && !ResourceUtils.isFlutterProject(project)) {
-                val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+            val isVector = item.file.extension?.lowercase() == ResourceExtension.SVG.extension || item.file.extension?.lowercase() == ResourceExtension.XML.extension
+            if (isVector && !ResourceUtils.isFlutterProject(project)) {
+                if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+                    val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+                        isOpaque = false
+                        font = JBUI.Fonts.smallFont()
+                        alignmentX = Component.LEFT_ALIGNMENT
+                        addActionListener {
+                            item.convertSvg = isSelected
+                            onUpdate()
+                        }
+                    }
+                    infoPanel.add(convertCheckbox)
+                }
+
+                val convertKtCheckbox = JCheckBox("Convert to Kotlin ImageVector (.kt)", item.convertToKotlinImageVector).apply {
                     isOpaque = false
                     font = JBUI.Fonts.smallFont()
                     alignmentX = Component.LEFT_ALIGNMENT
                     addActionListener {
-                        item.convertSvg = isSelected
+                        item.convertToKotlinImageVector = isSelected
                         onUpdate()
                     }
                 }
-                infoPanel.add(convertCheckbox)
+                infoPanel.add(convertKtCheckbox)
             } else if (ResourceUtils.isFlutterProject(project)) {
                 item.convertSvg = false
+                item.convertToKotlinImageVector = false
             }
         }
 
@@ -762,7 +777,17 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                             targetFolder.mkdirs()
                         }
 
-                        if (item.convertSvg) {
+                        if (item.convertToKotlinImageVector) {
+                            val xmlContent = if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
+                                SvgToXmlConverter.convertToXml(item.file.inputStream)
+                            } else {
+                                String(item.file.contentsToByteArray(), Charsets.UTF_8)
+                            }
+                            val basePkg = module?.let { ResourceUtils.findBasePackage(it) } ?: "com.example.resources"
+                            val ktCode = KotlinImageVectorParser.convertXmlToKotlinImageVector(xmlContent, item.name, basePkg)
+                            val targetFile = java.io.File(targetFolder, "${item.name}.kt")
+                            targetFile.writeText(ktCode)
+                        } else if (item.convertSvg) {
                             val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
                             val targetFile = java.io.File(targetFolder, "${item.name}.xml")
                             targetFile.writeText(xmlContent)

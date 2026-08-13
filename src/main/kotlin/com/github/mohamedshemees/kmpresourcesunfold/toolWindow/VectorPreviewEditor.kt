@@ -105,13 +105,27 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
 
     private fun refreshPreview() {
         val document = FileDocumentManager.getInstance().getDocument(file)
-        val xmlContent = document?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
+        val content = document?.text ?: String(file.contentsToByteArray(), Charsets.UTF_8)
 
         try {
-            if (xmlContent.contains(ResourceConstants.VECTOR_TAG)) {
+            val ext = file.extension?.lowercase()
+            val xmlToRender = when (ext) {
+                "kt" -> {
+                    val icons = com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.parseKotlinImageVectors(content)
+                    icons.firstOrNull()?.xmlContent
+                }
+                "svg" -> {
+                    com.github.mohamedshemees.kmpresourcesunfold.SvgToXmlConverter.convertToXml(content.byteInputStream())
+                }
+                else -> {
+                    if (content.contains(ResourceConstants.VECTOR_TAG)) content else null
+                }
+            }
+
+            if (xmlToRender != null) {
                 val renderScale = 10.0 * zoomScale
                 val targetSize = VdPreview.TargetSize.createFromScale(renderScale)
-                val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
+                val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlToRender, StringBuilder())
 
                 if (img != null) {
                     val imageIcon = ImageIcon(img)

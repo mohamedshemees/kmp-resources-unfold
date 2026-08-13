@@ -100,6 +100,14 @@ object ResourceIconProvider {
                 } else null
             }
 
+            ResourceExtension.KT -> {
+                val content = String(file.contentsToByteArray(), Charsets.UTF_8)
+                val icons = KotlinImageVectorParser.parseKotlinImageVectors(content)
+                if (icons.isNotEmpty()) {
+                    renderVector(icons.first().xmlContent, size)
+                } else null
+            }
+
             ResourceExtension.TTF, ResourceExtension.OTF, ResourceExtension.WOFF, ResourceExtension.WOFF2 -> null
         }
     }
@@ -127,6 +135,14 @@ object ResourceIconProvider {
                     if (xmlContent.contains(ResourceConstants.VECTOR_TAG)) {
                         val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
                         VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
+                    } else null
+                }
+                ResourceExtension.KT -> {
+                    val content = String(file.contentsToByteArray(), Charsets.UTF_8)
+                    val icons = KotlinImageVectorParser.parseKotlinImageVectors(content)
+                    if (icons.isNotEmpty()) {
+                        val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
+                        VdPreview.getPreviewFromVectorXml(targetSize, icons.first().xmlContent, StringBuilder())
                     } else null
                 }
                 ResourceExtension.TTF, ResourceExtension.OTF, ResourceExtension.WOFF, ResourceExtension.WOFF2 -> null

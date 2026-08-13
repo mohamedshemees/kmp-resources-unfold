@@ -10,6 +10,8 @@ object KmpResourceScanner {
         ProjectRootManager.getInstance(project).fileIndex.iterateContent { file ->
             if (!file.isDirectory) {
                 val path = file.path
+                val ext = file.extension?.lowercase()
+                val isKotlinSource = ext == "kt" && (path.contains("/src/") || path.contains("\\src\\"))
                 val isComposeResource = path.contains(ResourceConstants.COMPOSE_RESOURCES_DIR)
                 val isAndroidResource = path.contains("/src/main/${ResourceConstants.ANDROID_RES_DIR}/") || 
                                      path.contains("\\src\\main\\${ResourceConstants.ANDROID_RES_DIR}\\") ||
@@ -18,11 +20,17 @@ object KmpResourceScanner {
                 val isGenericAsset = path.contains("/assets/") || path.contains("\\assets\\") ||
                                     path.contains("/images/") || path.contains("\\images\\")
                 
-                if ((isComposeResource || isAndroidResource || isGenericAsset) && 
+                if ((isKotlinSource || isComposeResource || isAndroidResource || isGenericAsset) && 
                     !path.contains(ResourceConstants.BUILD_DIR_1) && 
                     !path.contains(ResourceConstants.BUILD_DIR_2)) {
-                    val ext = file.extension?.lowercase()
-                    if (ResourceExtension.allExtensions.contains(ext)) {
+                    if (ext == "kt") {
+                        try {
+                            val content = String(file.contentsToByteArray(), Charsets.UTF_8)
+                            if (KotlinImageVectorParser.isKotlinImageVectorFile(content)) {
+                                drawableFiles.add(file)
+                            }
+                        } catch (_: Throwable) {}
+                    } else if (ResourceExtension.allExtensions.contains(ext)) {
                         drawableFiles.add(file)
                     }
                 }
