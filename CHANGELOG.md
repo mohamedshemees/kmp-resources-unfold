@@ -25,8 +25,10 @@
 ### Changed
 - **Tool Window Header Column Layout**: Reorganized main tool window header controls into a clean vertical column order (Actions Toolbar, full-width Module dropdown, Filter Chips, Search Bar, and Figma Bridge Port controls).
 - **Streamlined Vector Import UX**: Automatically hid unnecessary density dropdowns for resolution-independent vector assets (`.svg`, `.xml`), routing them directly into `drawable/` without density subfolder qualifiers.
-- **Compact List Item Rows**: Adjusted spacing in the main tool window list to group preview icons, asset names, and metadata labels closely together.
+### Fixed
+- **Duplicate Gutter Icons**: Prevented duplicate line markers on `val IconName: ImageVector` declarations and suppressed gutter icons on private backing fields (`_IconName`).
 
+## [2.4.0]
 ### Added
 - **Local & Google Fonts Wizard**: Added support for browsing and downloading font families from Google Fonts, as well as importing local font files with renaming and prefixing capabilities.
 - **Dedicated Fonts Filter**: Added a "Fonts" filter chip in the tool window to view and filter font files in the project.
