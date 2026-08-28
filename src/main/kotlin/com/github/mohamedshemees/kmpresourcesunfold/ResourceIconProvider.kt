@@ -28,8 +28,7 @@ object ResourceIconProvider {
                 if (ext != null && ResourceExtension.fontExtensions.contains(ext)) {
                     FontFileIcon(file, size)
                 } else {
-                    val baseIcon = createIcon(file, size) ?: UIManager.getIcon("FileView.fileIcon")
-                    CheckerboardIcon(baseIcon, size, size)
+                    createIcon(file, size) ?: CheckerboardIcon(UIManager.getIcon("FileView.fileIcon"), size, size)
                 }
             } catch (e: Throwable) {
                 CheckerboardIcon(UIManager.getIcon("FileView.fileIcon"), size, size)
@@ -38,7 +37,7 @@ object ResourceIconProvider {
     }
 
     private fun drawCheckerboard(g2: Graphics2D, width: Int, height: Int, x: Int = 0, y: Int = 0) {
-        val squareSize = if (width <= 32) 4 else 8
+        val squareSize = if (width <= 18) 3 else if (width <= 32) 4 else 8
         val light = java.awt.Color(0x414243)
         val dark = java.awt.Color(0x393A3B)
 
@@ -50,15 +49,43 @@ object ResourceIconProvider {
         }
     }
 
-    class CheckerboardIcon(private val icon: Icon, private val width: Int, private val height: Int) : Icon {
+    class CheckerboardIcon(
+        private val image: Image,
+        private val width: Int,
+        private val height: Int
+    ) : Icon {
+
+        constructor(icon: Icon, width: Int, height: Int) : this(
+            if (icon is ImageIcon) icon.image else {
+                val bi = java.awt.image.BufferedImage(maxOf(1, icon.iconWidth), maxOf(1, icon.iconHeight), java.awt.image.BufferedImage.TYPE_INT_ARGB)
+                val g2 = bi.createGraphics()
+                icon.paintIcon(null, g2, 0, 0)
+                g2.dispose()
+                bi
+            },
+            width,
+            height
+        )
 
         override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
             val g2 = g.create() as Graphics2D
             try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY)
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+
                 drawCheckerboard(g2, width, height, x, y)
-                val iconX = x + (width - icon.iconWidth) / 2
-                val iconY = y + (height - icon.iconHeight) / 2
-                icon.paintIcon(c, g2, iconX, iconY)
+                
+                val imgW = image.getWidth(null)
+                val imgH = image.getHeight(null)
+                if (imgW > 0 && imgH > 0) {
+                    val scale = minOf(width.toDouble() / imgW, height.toDouble() / imgH)
+                    val drawW = maxOf(1, (imgW * scale).toInt())
+                    val drawH = maxOf(1, (imgH * scale).toInt())
+                    val iconX = x + (width - drawW) / 2
+                    val iconY = y + (height - drawH) / 2
+                    g2.drawImage(image, iconX, iconY, drawW, drawH, null)
+                }
             } finally {
                 g2.dispose()
             }
@@ -76,14 +103,7 @@ object ResourceIconProvider {
                 file.inputStream.use { stream ->
                     val img = ImageIO.read(stream)
                     if (img != null) {
-                        val maxDim = maxOf(img.width, img.height).toDouble()
-                        val scale = if (maxDim > size) size / maxDim else 1.0
-                        val scaled = img.getScaledInstance(
-                            (img.width * scale).toInt(),
-                            (img.height * scale).toInt(),
-                            Image.SCALE_SMOOTH
-                        )
-                        ImageIcon(scaled)
+                        CheckerboardIcon(img, size, size)
                     } else null
                 }
             }
@@ -113,9 +133,10 @@ object ResourceIconProvider {
     }
 
     private fun renderVector(xmlContent: String, size: Int): Icon? {
-        val targetSize = VdPreview.TargetSize.createFromMaxDimension(size)
+        val renderResolution = maxOf(size * 4, 64)
+        val targetSize = VdPreview.TargetSize.createFromMaxDimension(renderResolution)
         val img = VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
-        return img?.let { ImageIcon(it) }
+        return img?.let { CheckerboardIcon(it, size, size) }
     }
 
     fun getIconAsHtml(file: VirtualFile, size: Int): String? {

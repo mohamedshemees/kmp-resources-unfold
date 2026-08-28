@@ -379,23 +379,42 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
 
         if (isSummary) {
             val editorText = (targetBox.editor.editorComponent as JTextField).text
-            val (_, baseType, subPath) = parseTargetText(editorText)
+            val (moduleName, baseType, subPath) = parseTargetText(editorText)
             
-            val selectedTarget = targetBox.selectedItem as? TargetOption
-            val resDirName = selectedTarget?.file?.name ?: when(baseType) {
-                "Android" -> "res"
-                "Compose" -> "composeResources"
-                "Assets" -> "assets"
-                else -> baseType.ifEmpty { "composeResources" }
+            val targetPath = if (item.convertToKotlinImageVector) {
+                val module = if (moduleName != null) {
+                    ModuleManager.getInstance(project).modules.find { it.name == moduleName }
+                } else null
+                val (_, iconsFolder) = ResourceUtils.getIconsPackageAndDir(module, project)
+                val modulePrefix = module?.name?.let { "$it: " } ?: ""
+                val folderDisplay = if (iconsFolder.path.contains("src/")) {
+                    "src/" + iconsFolder.path.substringAfter("src/")
+                } else if (iconsFolder.path.contains("src\\")) {
+                    "src/" + iconsFolder.path.substringAfter("src\\").replace("\\", "/")
+                } else {
+                    iconsFolder.name
+                }
+                "$modulePrefix$folderDisplay/${item.name}.kt"
+            } else {
+                val selectedTarget = targetBox.selectedItem as? TargetOption
+                val resDirName = selectedTarget?.file?.name ?: when(baseType) {
+                    "Android" -> "res"
+                    "Compose" -> "composeResources"
+                    "Assets" -> "assets"
+                    else -> baseType.ifEmpty { "composeResources" }
+                }
+                
+                val folderBase = if (subPath != null) subPath.replace(".", "/") else "drawable"
+                val isVector = item.file.extension?.lowercase() == ResourceExtension.SVG.extension || 
+                               item.file.extension?.lowercase() == ResourceExtension.XML.extension ||
+                               item.convertSvg
+                val densityDir = when (baseType) {
+                    "Android", "Compose" -> if (isVector) folderBase else "${folderBase}${item.density.directoryQualifier}"
+                    else -> folderBase
+                }
+                
+                if (densityDir.isNotEmpty()) "$resDirName/$densityDir/${item.name}.${item.extension}" else "$resDirName/${item.name}.${item.extension}"
             }
-            
-            val folderBase = if (subPath != null) subPath.replace(".", "/") else "drawable"
-            val densityDir = when (baseType) {
-                "Android", "Compose" -> "${folderBase}${item.density.directoryQualifier}"
-                else -> folderBase
-            }
-            
-            val targetPath = if (densityDir.isNotEmpty()) "$resDirName/$densityDir/${item.name}.${item.extension}" else "$resDirName/${item.name}.${item.extension}"
             
             val nameLabel = JBLabel(item.name).apply {
                 font = JBUI.Fonts.label().deriveFont(Font.BOLD)
@@ -410,28 +429,34 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(pathLabel)
         } else {
-            val densityBox = ComboBox(Density.ALL_DENSITIES.toTypedArray()).apply {
-                selectedItem = if (item.density == Density.DEFAULT) Density.MDPI else item.density
-                font = JBUI.Fonts.label().deriveFont(Font.BOLD, 12f)
-                alignmentX = Component.LEFT_ALIGNMENT
-                
-                var isInternalChange = false
-                addActionListener {
-                    if (isInternalChange) return@addActionListener
-                    val newDensity = selectedItem as Density
-                    val oldDensity = item.density
+            val isSvg = item.file.extension?.lowercase() == ResourceExtension.SVG.extension
+            val isXml = item.file.extension?.lowercase() == ResourceExtension.XML.extension
+            val isVector = isSvg || isXml
+
+            if (!isVector) {
+                val densityBox = ComboBox(Density.ALL_DENSITIES.toTypedArray()).apply {
+                    selectedItem = if (item.density == Density.DEFAULT) Density.MDPI else item.density
+                    font = JBUI.Fonts.label().deriveFont(Font.BOLD, 12f)
+                    alignmentX = Component.LEFT_ALIGNMENT
                     
-                    if (newDensity != oldDensity) {
-                        val conflictItem = groupItems.find { it != item && it.density == newDensity }
-                        if (conflictItem != null) {
-                            conflictItem.density = oldDensity
+                    var isInternalChange = false
+                    addActionListener {
+                        if (isInternalChange) return@addActionListener
+                        val newDensity = selectedItem as Density
+                        val oldDensity = item.density
+                        
+                        if (newDensity != oldDensity) {
+                            val conflictItem = groupItems.find { it != item && it.density == newDensity }
+                            if (conflictItem != null) {
+                                conflictItem.density = oldDensity
+                            }
+                            item.density = newDensity
+                            onUpdate()
                         }
-                        item.density = newDensity
-                        onUpdate()
                     }
                 }
+                infoPanel.add(densityBox)
             }
-            infoPanel.add(densityBox)
 
             val size = ResourceUtils.formatSize(item.file.length)
             val infoLabel = JBLabel(MyBundle.message("label.itemInfo", "", size, item.extension)).apply {
@@ -441,31 +466,77 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
             }
             infoPanel.add(infoLabel)
 
-            val isVector = item.file.extension?.lowercase() == ResourceExtension.SVG.extension || item.file.extension?.lowercase() == ResourceExtension.XML.extension
             if (isVector && !ResourceUtils.isFlutterProject(project)) {
-                if (item.file.extension?.lowercase() == ResourceExtension.SVG.extension) {
-                    val convertCheckbox = JCheckBox(MyBundle.message("prompt.convertSvg"), item.convertSvg).apply {
+                val radioPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+                    isOpaque = false
+                    alignmentX = Component.LEFT_ALIGNMENT
+                }
+                val btnGroup = ButtonGroup()
+
+                if (isSvg) {
+                    val xmlRadio = JRadioButton("Convert to XML (.xml)", item.convertSvg && !item.convertToKotlinImageVector).apply {
                         isOpaque = false
                         font = JBUI.Fonts.smallFont()
-                        alignmentX = Component.LEFT_ALIGNMENT
                         addActionListener {
-                            item.convertSvg = isSelected
+                            item.convertSvg = true
+                            item.convertToKotlinImageVector = false
                             onUpdate()
                         }
                     }
-                    infoPanel.add(convertCheckbox)
+                    val ktRadio = JRadioButton("Convert to Kotlin ImageVector (.kt)", item.convertToKotlinImageVector).apply {
+                        isOpaque = false
+                        font = JBUI.Fonts.smallFont()
+                        addActionListener {
+                            item.convertSvg = false
+                            item.convertToKotlinImageVector = true
+                            onUpdate()
+                        }
+                    }
+                    val svgRadio = JRadioButton("Keep as SVG (.svg)", !item.convertSvg && !item.convertToKotlinImageVector).apply {
+                        isOpaque = false
+                        font = JBUI.Fonts.smallFont()
+                        addActionListener {
+                            item.convertSvg = false
+                            item.convertToKotlinImageVector = false
+                            onUpdate()
+                        }
+                    }
+
+                    btnGroup.add(xmlRadio)
+                    btnGroup.add(ktRadio)
+                    btnGroup.add(svgRadio)
+
+                    radioPanel.add(xmlRadio)
+                    radioPanel.add(ktRadio)
+                    radioPanel.add(svgRadio)
+                } else {
+                    val xmlRadio = JRadioButton("Keep as XML (.xml)", !item.convertToKotlinImageVector).apply {
+                        isOpaque = false
+                        font = JBUI.Fonts.smallFont()
+                        addActionListener {
+                            item.convertSvg = false
+                            item.convertToKotlinImageVector = false
+                            onUpdate()
+                        }
+                    }
+                    val ktRadio = JRadioButton("Convert to Kotlin ImageVector (.kt)", item.convertToKotlinImageVector).apply {
+                        isOpaque = false
+                        font = JBUI.Fonts.smallFont()
+                        addActionListener {
+                            item.convertSvg = false
+                            item.convertToKotlinImageVector = true
+                            onUpdate()
+                        }
+                    }
+
+                    btnGroup.add(xmlRadio)
+                    btnGroup.add(ktRadio)
+
+                    radioPanel.add(xmlRadio)
+                    radioPanel.add(ktRadio)
                 }
 
-                val convertKtCheckbox = JCheckBox("Convert to Kotlin ImageVector (.kt)", item.convertToKotlinImageVector).apply {
-                    isOpaque = false
-                    font = JBUI.Fonts.smallFont()
-                    alignmentX = Component.LEFT_ALIGNMENT
-                    addActionListener {
-                        item.convertToKotlinImageVector = isSelected
-                        onUpdate()
-                    }
-                }
-                infoPanel.add(convertKtCheckbox)
+                infoPanel.add(radioPanel)
             } else if (ResourceUtils.isFlutterProject(project)) {
                 item.convertSvg = false
                 item.convertToKotlinImageVector = false
@@ -766,9 +837,12 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                         indicator.fraction = index.toDouble() / itemsToImport.size
                         indicator.text = "Importing ${item.name}..."
 
+                        val isVector = item.file.extension?.lowercase() == ResourceExtension.SVG.extension || 
+                                       item.file.extension?.lowercase() == ResourceExtension.XML.extension ||
+                                       item.convertSvg
                         val folderBase = subPath?.replace(".", "/") ?: "drawable"
                         val densityDirName = when (baseType) {
-                            "Android", "Compose" -> "${folderBase}${item.density.directoryQualifier}"
+                            "Android", "Compose" -> if (isVector) folderBase else "${folderBase}${item.density.directoryQualifier}"
                             else -> subPath?.replace(".", "/") ?: ""
                         }
 
@@ -783,10 +857,18 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                             } else {
                                 String(item.file.contentsToByteArray(), Charsets.UTF_8)
                             }
-                            val basePkg = module?.let { ResourceUtils.findBasePackage(it) } ?: "com.example.resources"
-                            val ktCode = KotlinImageVectorParser.convertXmlToKotlinImageVector(xmlContent, item.name, basePkg)
-                            val targetFile = java.io.File(targetFolder, "${item.name}.kt")
+                            val (iconsPkg, iconsFolder) = ResourceUtils.getIconsPackageAndDir(module, project)
+                            if (!iconsFolder.exists()) {
+                                iconsFolder.mkdirs()
+                            }
+                            val ktCode = KotlinImageVectorParser.convertXmlToKotlinImageVector(xmlContent, item.name, iconsPkg)
+                            val targetFile = java.io.File(iconsFolder, "${item.name}.kt")
                             targetFile.writeText(ktCode)
+
+                            val vf = VfsUtil.findFileByIoFile(iconsFolder, true)
+                            if (vf != null) {
+                                VfsUtil.markDirtyAndRefresh(true, true, true, vf)
+                            }
                         } else if (item.convertSvg) {
                             val xmlContent = SvgToXmlConverter.convertToXml(item.file.inputStream)
                             val targetFile = java.io.File(targetFolder, "${item.name}.xml")
@@ -798,6 +880,11 @@ class ImportDrawablesDialog(private val project: Project, initialFiles: List<Vir
                     }
                     
                     VfsUtil.markDirtyAndRefresh(true, true, true, resDirVirtual)
+                    module?.let { m ->
+                        com.intellij.openapi.roots.ModuleRootManager.getInstance(m).contentRoots.forEach { root ->
+                            VfsUtil.markDirtyAndRefresh(true, true, true, root)
+                        }
+                    }
                 } catch (e: Exception) {
                     UIUtil.invokeLaterIfNeeded {
                         Messages.showErrorDialog(project, e.message ?: MyBundle.message("error.unknown"), MyBundle.message("title.importError"))

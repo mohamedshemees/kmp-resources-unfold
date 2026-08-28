@@ -4,7 +4,29 @@
 
 ## [Unreleased]
 
-## [2.4.0]
+## [2.5.0]
+### Added
+- **Compose `ImageVector` Code Generation & Import**:
+    - Convert SVG and XML drawables directly into standalone Compose `ImageVector` Kotlin properties (`val IconName: ImageVector`).
+    - Standardized generation format featuring cached getters with `@Suppress("ObjectPropertyName")` backing fields (`private var _IconName: ImageVector? = null`).
+    - Automatic directory placement: Converted Kotlin `ImageVector` files are automatically written into `<sourceRoot>/<package>/icons/` (e.g. `src/commonMain/kotlin/.../icons/`), auto-creating the directory if needed.
+- **In-Editor `ImageVector` Gutter Icon Previews & Swapping**:
+    - Live, real-time gutter icon preview for all `val IconName: ImageVector` declarations directly in the editor buffer without requiring a file save.
+    - Contrast & theme-aware rendering: Vectors (including pure white `SolidColor(Color.White)` icons) are wrapped in high-contrast checkerboard icons for clear visibility across both Light and Dark editor themes.
+    - Gutter icon previews for Compose vector callsites (`Icon(...)`, `Image(...)`, `rememberVectorPainter(...)`) with interactive click-to-swap support.
+- **Import Dialog Radio Button Controls**:
+    - Replaced conversion checkboxes with intuitive Radio Button Groups for vector conversion targets:
+        - **Convert to XML (`.xml`)**
+        - **Convert to Kotlin ImageVector (`.kt`)**
+        - **Keep as SVG (`.svg`)**
+- **HiDPI / Retina Sharp Rendering**:
+    - Enhanced vector rasterization to render at 4× target resolution with bilinear anti-aliasing interpolation, eliminating pixelation in gutter previews, tab icons, and project file tree badges.
+
+### Changed
+- **Tool Window Header Column Layout**: Reorganized main tool window header controls into a clean vertical column order (Actions Toolbar, full-width Module dropdown, Filter Chips, Search Bar, and Figma Bridge Port controls).
+- **Streamlined Vector Import UX**: Automatically hid unnecessary density dropdowns for resolution-independent vector assets (`.svg`, `.xml`), routing them directly into `drawable/` without density subfolder qualifiers.
+- **Compact List Item Rows**: Adjusted spacing in the main tool window list to group preview icons, asset names, and metadata labels closely together.
+
 ### Added
 - **Local & Google Fonts Wizard**: Added support for browsing and downloading font families from Google Fonts, as well as importing local font files with renaming and prefixing capabilities.
 - **Dedicated Fonts Filter**: Added a "Fonts" filter chip in the tool window to view and filter font files in the project.

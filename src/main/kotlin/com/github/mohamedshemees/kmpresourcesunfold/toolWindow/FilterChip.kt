@@ -16,8 +16,8 @@ class FilterChip(
 
     init {
         isOpaque = false
-        border = BorderFactory.createEmptyBorder(4, 12, 4, 12)
-        font = font.deriveFont(Font.BOLD, 11f)
+        border = BorderFactory.createEmptyBorder(2, 8, 2, 8)
+        font = font.deriveFont(Font.BOLD, 10.5f)
         cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         updateAppearance()
 

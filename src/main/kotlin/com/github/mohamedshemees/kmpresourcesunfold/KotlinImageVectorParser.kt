@@ -7,7 +7,8 @@ data class KotlinImageVectorIcon(
     val name: String,
     val xmlContent: String,
     val startOffset: Int = 0,
-    val endOffset: Int = 0
+    val endOffset: Int = 0,
+    val propertyName: String? = null
 )
 
 object KotlinImageVectorParser {
@@ -45,8 +46,8 @@ object KotlinImageVectorParser {
 
                 val builderArgsStr = content.substring(openParen + 1, closeParen)
                 
-                val precedingSnippet = content.substring(maxOf(0, builderIndex - 200), builderIndex)
-                val propMatch = Regex("""val\s+([A-Za-z0-9_]+)\s*:\s*ImageVector""").findAll(precedingSnippet).lastOrNull()
+                val precedingSnippet = content.substring(maxOf(0, builderIndex - 1000), builderIndex)
+                val propMatch = Regex("""(?:val|var)\s+(?:[A-Za-z0-9_.]+\.)?([A-Za-z0-9_]+)\s*:\s*ImageVector""").findAll(precedingSnippet).lastOrNull()
                 val propName = propMatch?.groupValues?.get(1)
 
                 val name = extractParamValue(builderArgsStr, "name")?.trim('"') 
@@ -90,8 +91,8 @@ object KotlinImageVectorParser {
                     append("</vector>")
                 }
 
-                val startOffset = if (propMatch != null) maxOf(0, builderIndex - 200) + propMatch.range.first else builderIndex
-                icons.add(KotlinImageVectorIcon(name, xml, startOffset, blockEnd))
+                val startOffset = if (propMatch != null) maxOf(0, builderIndex - 1000) + propMatch.range.first else builderIndex
+                icons.add(KotlinImageVectorIcon(name, xml, startOffset, blockEnd, propName))
 
                 searchIndex = blockEnd + 1
             }
@@ -377,7 +378,7 @@ object KotlinImageVectorParser {
         sb.append("import androidx.compose.ui.graphics.vector.path\n")
         sb.append("import androidx.compose.ui.unit.dp\n\n")
 
-        sb.append("public val $cleanName: ImageVector\n")
+        sb.append("val $cleanName: ImageVector\n")
         sb.append("    get() {\n")
         sb.append("        if ($backingVarName != null) {\n")
         sb.append("            return $backingVarName!!\n")
@@ -459,6 +460,7 @@ object KotlinImageVectorParser {
         sb.append("        }.build()\n\n")
         sb.append("        return $backingVarName!!\n")
         sb.append("    }\n\n")
+        sb.append("@Suppress(\"ObjectPropertyName\")\n")
         sb.append("private var $backingVarName: ImageVector? = null\n")
 
         return sb.toString()

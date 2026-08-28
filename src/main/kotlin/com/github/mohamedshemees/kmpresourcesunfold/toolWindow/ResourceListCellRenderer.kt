@@ -31,29 +31,50 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
             is ResourceParent -> {
                 label.text = value.name
                 label.icon = value.icon
-                label.font = label.font.deriveFont(Font.BOLD, 13f)
+                label.iconTextGap = 8
+                label.font = label.font.deriveFont(Font.BOLD, 12f)
+                label.alignmentY = Component.CENTER_ALIGNMENT
+
+                val contentPanel = JPanel().apply {
+                    layout = BoxLayout(this, BoxLayout.X_AXIS)
+                    isOpaque = false
+                    add(label)
+                    if (value.subtitle.isNotEmpty()) {
+                        add(Box.createHorizontalStrut(8))
+                        subLabel.text = value.subtitle
+                        subLabel.foreground = JBColor.GRAY
+                        subLabel.font = subLabel.font.deriveFont(10f)
+                        subLabel.alignmentY = Component.CENTER_ALIGNMENT
+                        add(subLabel)
+                    }
+                }
+
                 panel.background = list.background
-                val padding = BorderFactory.createEmptyBorder(10, 12, 5, 12)
+                val padding = BorderFactory.createEmptyBorder(6, 12, 6, 12)
                 panel.border = padding
-                panel.add(label, BorderLayout.CENTER)
-                return panel
+                panel.add(contentPanel, BorderLayout.WEST)
             }
             is ResourceChild -> {
                 label.text = value.density
                 label.foreground = JBColor.GRAY
                 label.font = label.font.deriveFont(11f)
+                label.alignmentY = Component.CENTER_ALIGNMENT
                 
                 subLabel.text = if (value.file.extension?.lowercase() == "kt") "${value.moduleName} • ${value.file.name}" else value.moduleName
                 subLabel.foreground = JBColor.LIGHT_GRAY
                 subLabel.font = subLabel.font.deriveFont(9f)
+                subLabel.alignmentY = Component.CENTER_ALIGNMENT
                 
-                val indentPanel = JPanel(BorderLayout(10, 0))
-                indentPanel.isOpaque = false
-                indentPanel.border = BorderFactory.createEmptyBorder(0, 35, 0, 0)
-                indentPanel.add(label, BorderLayout.WEST)
-                indentPanel.add(subLabel, BorderLayout.CENTER)
+                val indentPanel = JPanel().apply {
+                    layout = BoxLayout(this, BoxLayout.X_AXIS)
+                    isOpaque = false
+                    border = BorderFactory.createEmptyBorder(0, 35, 0, 0)
+                    add(label)
+                    add(Box.createHorizontalStrut(10))
+                    add(subLabel)
+                }
                 
-                panel.add(indentPanel, BorderLayout.CENTER)
+                panel.add(indentPanel, BorderLayout.WEST)
             }
             is StringResource -> {
                 label.text = value.key
@@ -104,6 +125,7 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
         panel.apply {
             isOpaque = true
             background = list.background
+            toolTipText = null
             
             val padding = BorderFactory.createEmptyBorder(6, 12, 6, 12)
             if (isSelected) {

@@ -26,10 +26,40 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
 
     private val vectorCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>>>()
 
+    private fun findKotlinVector(
+        element: PsiElement,
+        iconName: String
+    ): Pair<VirtualFile?, com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>? {
+        val cleanName = iconName.removePrefix("_")
+        // 1. Check current containing file first (in-memory, live editor changes)
+        try {
+            val containingFile = element.containingFile
+            val currentText = containingFile?.text
+            if (currentText != null && com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.isKotlinImageVectorFile(currentText)) {
+                val icons = com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.parseKotlinImageVectors(currentText)
+                val match = icons.find { 
+                    it.name == iconName || 
+                    it.name.equals(iconName, ignoreCase = true) ||
+                    it.propertyName == iconName ||
+                    it.propertyName.equals(iconName, ignoreCase = true) ||
+                    it.name.equals(cleanName, ignoreCase = true) ||
+                    it.propertyName.equals(cleanName, ignoreCase = true)
+                }
+                if (match != null) {
+                    return Pair(containingFile.virtualFile, match)
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // 2. Check project-wide files
+        return findKotlinVectorInProject(element.project, iconName)
+    }
+
     private fun findKotlinVectorInProject(
         project: com.intellij.openapi.project.Project, 
         iconName: String
     ): Pair<VirtualFile, com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>? {
+        val cleanName = iconName.removePrefix("_")
         val allFiles = KmpResourceScanner.findComposeDrawables(project)
         for (file in allFiles) {
             if (file.extension?.lowercase() == "kt") {
@@ -45,11 +75,33 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                         parsed
                     } catch (_: Throwable) { emptyList() }
                 }
-                val match = icons.find { it.name == iconName }
+                val match = icons.find { 
+                    it.name == iconName || 
+                    it.name.equals(iconName, ignoreCase = true) ||
+                    it.propertyName == iconName ||
+                    it.propertyName.equals(iconName, ignoreCase = true) ||
+                    it.name.equals(cleanName, ignoreCase = true) ||
+                    it.propertyName.equals(cleanName, ignoreCase = true)
+                }
                 if (match != null) return Pair(file, match)
             }
         }
         return null
+    }
+
+    private fun createVectorIcon(xmlContent: String?, fallbackFile: VirtualFile?, size: Int = 18): javax.swing.Icon {
+        if (xmlContent != null) {
+            try {
+                val renderResolution = maxOf(size * 4, 64)
+                val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(renderResolution)
+                val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, xmlContent, StringBuilder())
+                if (img != null) {
+                    return ResourceIconProvider.CheckerboardIcon(img, size, size)
+                }
+            } catch (_: Throwable) {}
+        }
+        return fallbackFile?.let { ResourceIconProvider.getIcon(it, size) }
+            ?: ResourceIconProvider.CheckerboardIcon(javax.swing.UIManager.getIcon("FileView.fileIcon"), size, size)
     }
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
@@ -130,49 +182,52 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
             }
         }
 
-        // 4. Handle Kotlin ImageVector property definitions (val Settings: ImageVector)
+        // 4. Handle Kotlin ImageVector property definitions (val StickyNote: ImageVector)
         if (parent is org.jetbrains.kotlin.psi.KtProperty && parent.nameIdentifier == element) {
-            val typeText = parent.typeReference?.text
-            val isImageVectorProp = typeText == "ImageVector" || parent.text.contains("ImageVector.Builder")
-            if (isImageVectorProp) {
-                val file = element.containingFile?.virtualFile
-                if (file != null) {
-                    val (ktFile, matchedIcon) = findKotlinVectorInProject(element.project, text) ?: Pair(file, null)
-                    val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(18)
-                    val img = matchedIcon?.let { com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, it.xmlContent, StringBuilder()) }
-                    val icon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(ktFile, 18)
-                    return createMarker(element, icon, "Kotlin ImageVector: $text") { _, _ -> }
+            // Never place gutter icon on backing fields like `_StickyNote`
+            if (!text.startsWith("_")) {
+                val typeText = parent.typeReference?.text
+                val isImageVectorProp = typeText?.contains("ImageVector") == true || 
+                                        parent.text.contains("ImageVector.Builder") || 
+                                        parent.text.contains("Builder(")
+                if (isImageVectorProp) {
+                    val found = findKotlinVector(element, text)
+                    if (found != null && (found.second.name.equals(text, ignoreCase = true) || found.second.propertyName.equals(text, ignoreCase = true))) {
+                        val icon = createVectorIcon(found.second.xmlContent, found.first, 18)
+                        return createMarker(element, icon, "Kotlin ImageVector: $text") { _, _ -> }
+                    }
                 }
             }
         }
 
-        // 5. Handle Vector callers e.g. rememberVectorPainter(Settings), Icon(Settings), rememberVectorPainter(image = Settings)
-        val valueArg = (parent as? org.jetbrains.kotlin.psi.KtValueArgument)
-            ?: (grandParent as? org.jetbrains.kotlin.psi.KtValueArgument)
-            ?: (nameRefParent as? org.jetbrains.kotlin.psi.KtValueArgument)
+        // 5. Handle Vector callers / references e.g. Icon(StickyNote), Image(StickyNote), rememberVectorPainter(StickyNote)
+        if (nameRef != null && !text.startsWith("_") && text != "ImageVector" && text != "Builder") {
+            val enclosingProp = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtProperty::class.java)
+            val isInsideOwnVectorDeclaration = enclosingProp != null && (
+                enclosingProp.name == text ||
+                enclosingProp.name == "_$text" ||
+                enclosingProp.name?.removePrefix("_") == text
+            )
 
-        val callExpr = (valueArg?.parent?.parent as? org.jetbrains.kotlin.psi.KtCallExpression)
-            ?: (valueArg?.parent as? org.jetbrains.kotlin.psi.KtCallExpression)
-            ?: (grandParent as? org.jetbrains.kotlin.psi.KtCallExpression)
-            ?: (parent as? org.jetbrains.kotlin.psi.KtCallExpression)
+            if (!isInsideOwnVectorDeclaration) {
+                val valueArg = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtValueArgument::class.java)
+                val dotQualified = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtDotQualifiedExpression::class.java)
+                val isAppropriateUsage = valueArg != null || (dotQualified != null && dotQualified.selectorExpression == nameRef) || (enclosingProp != null && enclosingProp.name != text)
 
-        val calleeText = callExpr?.calleeExpression?.text
-        val isPainterOrIconCall = calleeText == "rememberVectorPainter" || calleeText == "Icon" || calleeText == "Image" || calleeText == "painterResource"
-
-        if (isPainterOrIconCall || valueArg != null || parent is org.jetbrains.kotlin.psi.KtProperty) {
-            val project = element.project
-            val (ktFile, matchedIcon) = findKotlinVectorInProject(project, text) ?: return null
-            val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(18)
-            val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, matchedIcon.xmlContent, StringBuilder())
-            val icon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(ktFile, 18)
-
-            return createMarker(element, icon, "Click to swap vector painter: $text") { e, elt ->
-                val targetRef = when (elt) {
-                    is KtNameReferenceExpression -> elt
-                    else -> elt.parent as? KtNameReferenceExpression
-                }
-                if (targetRef != null) {
-                    showVectorSwapPopup(e, targetRef)
+                if (isAppropriateUsage) {
+                    val found = findKotlinVector(element, text)
+                    if (found != null && (found.second.name.equals(text, ignoreCase = true) || found.second.propertyName.equals(text, ignoreCase = true))) {
+                        val icon = createVectorIcon(found.second.xmlContent, found.first, 18)
+                        return createMarker(element, icon, "Click to swap vector: $text") { e, elt ->
+                            val targetRef = when (elt) {
+                                is KtNameReferenceExpression -> elt
+                                else -> elt.parent as? KtNameReferenceExpression
+                            }
+                            if (targetRef != null) {
+                                showVectorSwapPopup(e, targetRef)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -352,8 +407,8 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                     icons.forEach { iconItem ->
                         val targetSize = com.android.ide.common.vectordrawable.VdPreview.TargetSize.createFromMaxDimension(24)
                         val img = com.android.ide.common.vectordrawable.VdPreview.getPreviewFromVectorXml(targetSize, iconItem.xmlContent, StringBuilder())
-                        val swingIcon = img?.let { javax.swing.ImageIcon(it) } ?: ResourceIconProvider.getIcon(file, 24)
-                        options.add(VectorOption(iconItem.name, file, swingIcon))
+                        val swingIcon = img?.let { ResourceIconProvider.CheckerboardIcon(javax.swing.ImageIcon(it), 24, 24) } ?: ResourceIconProvider.getIcon(file, 24)
+                        options.add(VectorOption(iconItem.propertyName ?: iconItem.name, file, swingIcon))
                     }
                 } catch (_: Throwable) {}
             } else {

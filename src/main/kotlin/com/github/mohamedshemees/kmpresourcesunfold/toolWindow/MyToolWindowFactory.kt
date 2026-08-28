@@ -32,6 +32,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
+import java.awt.Component
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.datatransfer.StringSelection
@@ -41,7 +42,12 @@ import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
-data class ResourceParent(val name: String, val icon: Icon?, val representativeFile: VirtualFile?)
+data class ResourceParent(
+    val name: String, 
+    val icon: Icon?, 
+    val representativeFile: VirtualFile?,
+    val subtitle: String = ""
+)
 data class ResourceChild(val file: VirtualFile, val density: String, val moduleName: String)
 data class ResourceFileItem(val file: VirtualFile, val moduleName: String)
 
@@ -187,13 +193,37 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
         val toolbar = ActionManager.getInstance().createActionToolbar("KmpResourcesUnfoldToolbar", actionGroup, true)
         toolbar.targetComponent = mainPanel
-        mainPanel.toolbar = toolbar.component
 
-        val topPanel = JPanel(BorderLayout())
-        val filterPanel = JPanel(BorderLayout(0, 5))
-        filterPanel.border = BorderFactory.createEmptyBorder(10, 0, 5, 0)
+        val topHeaderPanel = JPanel()
+        topHeaderPanel.layout = BoxLayout(topHeaderPanel, BoxLayout.Y_AXIS)
+        topHeaderPanel.border = BorderFactory.createEmptyBorder(6, 8, 6, 8)
 
-        val chipPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0))
+        // Row 1: Action Toolbar (+ and Refresh buttons)
+        val actionRow = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+            alignmentX = Component.LEFT_ALIGNMENT
+            isOpaque = false
+            add(toolbar.component)
+        }
+        topHeaderPanel.add(actionRow)
+        topHeaderPanel.add(Box.createVerticalStrut(6))
+
+        // Row 2: Module Selection
+        val moduleBox = ComboBox<ModuleOption>()
+        moduleBox.isEditable = true
+        val modulePanel = JPanel(BorderLayout(6, 0)).apply {
+            alignmentX = Component.LEFT_ALIGNMENT
+            isOpaque = false
+            add(JLabel(MyBundle.message("label.module")), BorderLayout.WEST)
+            add(moduleBox, BorderLayout.CENTER)
+        }
+        topHeaderPanel.add(modulePanel)
+        topHeaderPanel.add(Box.createVerticalStrut(6))
+
+        // Row 3: Filter Chips
+        val chipPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+            alignmentX = Component.LEFT_ALIGNMENT
+            isOpaque = false
+        }
         val chips = mutableListOf<FilterChip>()
 
         val onChipClicked = { clickedChip: FilterChip ->
@@ -208,6 +238,64 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         chips.add(FilterChip(MyBundle.message("filter.strings"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.fonts"), false, 0, onChipClicked))
         chips.forEach { chipPanel.add(it) }
+        topHeaderPanel.add(chipPanel)
+        topHeaderPanel.add(Box.createVerticalStrut(6))
+
+        // Row 4: Search Bar
+        val searchPanel = JPanel(BorderLayout()).apply {
+            alignmentX = Component.LEFT_ALIGNMENT
+            isOpaque = false
+        }
+        val searchField = SearchTextField()
+        searchPanel.add(searchField, BorderLayout.CENTER)
+        topHeaderPanel.add(searchPanel)
+        topHeaderPanel.add(Box.createVerticalStrut(6))
+
+        // Row 5: Figma Bridge Port controls
+        val portOptions = listOf(6789, 6790, 6791, 6792, 6793, 6794, 6795)
+        val portBox = ComboBox<Int>()
+        portOptions.forEach { portBox.addItem(it) }
+
+        val figmaService = FigmaBridgeService.getInstance(project)
+        val currentActive = figmaService.activePort ?: 6789
+        portBox.selectedItem = currentActive
+
+        val restartAction = object : AnAction("Relaunch Bridge", "Restart Figma Bridge on selected port", com.intellij.icons.AllIcons.Actions.Restart) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val selectedPort = portBox.selectedItem as Int
+                val newPort = figmaService.restartServer(selectedPort)
+                if (newPort != null) {
+                    portBox.selectedItem = newPort
+                    JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
+                        "Figma Bridge restarted on port $newPort",
+                        com.intellij.openapi.ui.MessageType.INFO,
+                        null
+                    ).setFadeoutTime(3000).createBalloon().show(RelativePoint.getCenterOf(portBox), Balloon.Position.above)
+                } else {
+                    Messages.showErrorDialog(project, "Could not start server on port $selectedPort", "Figma Bridge Error")
+                }
+            }
+        }
+
+        val restartBtn = com.intellij.openapi.actionSystem.impl.ActionButton(
+            restartAction, 
+            restartAction.templatePresentation.clone(), 
+            "KmpResourcesUnfold", 
+            Dimension(20, 20)
+        )
+
+        val portPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+            alignmentX = Component.LEFT_ALIGNMENT
+            isOpaque = false
+        }
+        val portLabel = JLabel("Figma Port:")
+        portLabel.font = portLabel.font.deriveFont(10f)
+        portPanel.add(portLabel)
+        portPanel.add(portBox)
+        portPanel.add(restartBtn)
+        topHeaderPanel.add(portPanel)
+
+        mainPanel.toolbar = topHeaderPanel
 
         project.messageBus.connect(toolWindow.disposable)
             .subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
@@ -220,10 +308,6 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             })
 
-        val modulePanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
-        modulePanel.add(JLabel(MyBundle.message("label.module")))
-        val moduleBox = ComboBox<ModuleOption>()
-        moduleBox.isEditable = true
         val editor = moduleBox.editor.editorComponent as JTextField
         var isFiltering = false
         var lastSelectedModule: ModuleOption? = null
@@ -351,61 +435,6 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             }
         }
 
-        modulePanel.add(moduleBox)
-
-        filterPanel.add(chipPanel, BorderLayout.NORTH)
-        filterPanel.add(modulePanel, BorderLayout.CENTER)
-
-        val searchField = SearchTextField()
-        val searchPanel = JPanel(BorderLayout())
-        searchPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
-        searchPanel.add(searchField, BorderLayout.CENTER)
-        
-        val portOptions = listOf(6789, 6790, 6791, 6792, 6793, 6794, 6795)
-        val portBox = ComboBox<Int>()
-        portOptions.forEach { portBox.addItem(it) }
-        
-        val figmaService = FigmaBridgeService.getInstance(project)
-        val currentActive = figmaService.activePort ?: 6789
-        portBox.selectedItem = currentActive
-
-        val restartAction = object : AnAction("Relaunch Bridge", "Restart Figma Bridge on selected port", com.intellij.icons.AllIcons.Actions.Restart) {
-            override fun actionPerformed(e: AnActionEvent) {
-                val selectedPort = portBox.selectedItem as Int
-                val newPort = figmaService.restartServer(selectedPort)
-                if (newPort != null) {
-                    portBox.selectedItem = newPort
-                    JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
-                        "Figma Bridge restarted on port $newPort",
-                        com.intellij.openapi.ui.MessageType.INFO,
-                        null
-                    ).setFadeoutTime(3000).createBalloon().show(RelativePoint.getCenterOf(portBox), Balloon.Position.above)
-                } else {
-                    Messages.showErrorDialog(project, "Could not start server on port $selectedPort", "Figma Bridge Error")
-                }
-            }
-        }
-        
-        val restartBtn = com.intellij.openapi.actionSystem.impl.ActionButton(
-            restartAction, 
-            restartAction.templatePresentation.clone(), 
-            "KmpResourcesUnfold", 
-            Dimension(22, 22)
-        )
-
-        val portPanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0))
-        portPanel.border = BorderFactory.createEmptyBorder(0, 5, 5, 5)
-        portPanel.add(JLabel("Figma Bridge Port:"))
-        portPanel.add(portBox)
-        portPanel.add(restartBtn)
-
-        val southPanel = JPanel(BorderLayout())
-        southPanel.add(searchPanel, BorderLayout.NORTH)
-        southPanel.add(portPanel, BorderLayout.SOUTH)
-
-        topPanel.add(filterPanel, BorderLayout.NORTH)
-        topPanel.add(southPanel, BorderLayout.SOUTH)
-
         val resourceModel = DefaultListModel<Any>()
         val resourceList = JBList(resourceModel).apply {
             selectionBackground = background
@@ -521,8 +550,8 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             if (filteredKotlinVectors.isNotEmpty()) {
                 filteredKotlinVectors.sortedBy { it.iconName }.forEach { item ->
-                    resourceModel.addElement(ResourceParent(item.iconName, item.icon, item.file))
-                    resourceModel.addElement(ResourceChild(item.file, "Compose ImageVector", item.moduleName))
+                    val sub = "${item.moduleName} • Compose Vector"
+                    resourceModel.addElement(ResourceParent(item.iconName, item.icon, item.file, sub))
                 }
             }
 
@@ -535,18 +564,29 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     val sortedFiles = files.sortedWith(compareBy({ getDensity(it).let { d -> densityOrder.indexOf(d).takeIf { i -> i >= 0 } ?: 100 } }, { it.name }))
                     
                     val representative = sortedFiles.find { getDensity(it) == "Default" } ?: sortedFiles.first()
+                    val moduleName = fileToModuleMap[representative] ?: "Unknown"
 
-                    resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative))
-
-                    sortedFiles.forEach { file ->
-                        val moduleName = fileToModuleMap[file] ?: "Unknown"
-                        resourceModel.addElement(ResourceChild(file, getDensity(file), moduleName))
+                    if (sortedFiles.size == 1) {
+                        val file = sortedFiles.first()
+                        val ext = file.extension?.uppercase() ?: "XML"
+                        val density = getDensity(file)
+                        val tag = if (density == "Default") ext else "$density • $ext"
+                        val sub = "$moduleName • $tag"
+                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(file), file, sub))
+                    } else {
+                        val sub = "$moduleName • ${sortedFiles.size} variants"
+                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative, sub))
+                        sortedFiles.forEach { file ->
+                            val mod = fileToModuleMap[file] ?: "Unknown"
+                            resourceModel.addElement(ResourceChild(file, getDensity(file), mod))
+                        }
                     }
                 }
             }
 
             if (filteredStrings.isNotEmpty() || filteredStringsFiles.isNotEmpty()) {
-                resourceModel.addElement(ResourceParent("Strings", UIManager.getIcon("FileView.fileIcon"), filteredStringsFiles.firstOrNull()))
+                val stringsSub = if (filteredStrings.isNotEmpty()) "${filteredStrings.size} keys" else ""
+                resourceModel.addElement(ResourceParent("Strings", UIManager.getIcon("FileView.fileIcon"), filteredStringsFiles.firstOrNull(), stringsSub))
                 filteredStrings.sortedBy { it.key }.forEach { resourceModel.addElement(it) }
                 filteredStringsFiles.sortedBy { it.name }.forEach { file ->
                     val moduleName = fileToModuleMap[file] ?: "Unknown"
@@ -567,7 +607,6 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         })
 
         val contentPanel = JPanel(BorderLayout())
-        contentPanel.add(topPanel, BorderLayout.NORTH)
         contentPanel.add(JBScrollPane(resourceList), BorderLayout.CENTER)
         mainPanel.setContent(contentPanel)
         toolWindow.contentManager.addContent(ContentFactory.getInstance().createContent(mainPanel, "", false))

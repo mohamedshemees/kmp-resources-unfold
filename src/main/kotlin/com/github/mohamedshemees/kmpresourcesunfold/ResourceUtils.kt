@@ -182,6 +182,20 @@ object ResourceUtils {
     }
 
     fun getKotlinSourceDir(module: Module): java.io.File? {
+        val rootManager = ModuleRootManager.getInstance(module)
+        val sourceRoots = rootManager.sourceRoots
+        for (root in sourceRoots) {
+            val path = root.path
+            if (path.contains("src/commonMain/kotlin") || path.contains("src\\commonMain\\kotlin")) {
+                return java.io.File(path)
+            }
+        }
+        for (root in sourceRoots) {
+            val path = root.path
+            if (path.contains("/kotlin") || path.contains("\\kotlin")) {
+                return java.io.File(path)
+            }
+        }
         val rootDir = getModuleRootDir(module) ?: return null
         val commonMain = java.io.File(rootDir, "src/commonMain/kotlin")
         if (commonMain.exists() && commonMain.isDirectory) {
@@ -192,5 +206,22 @@ object ResourceUtils {
             return main
         }
         return commonMain
+    }
+
+    fun getIconsPackageAndDir(module: Module?, project: Project): Pair<String, java.io.File> {
+        val basePkg = module?.let { findBasePackage(it) } ?: ""
+        val iconsPkg = if (basePkg.isNotEmpty()) "$basePkg.icons" else "icons"
+
+        val kotlinSrcDir = module?.let { getKotlinSourceDir(it) }
+            ?: project.guessProjectDir()?.let { java.io.File(it.path, "src/commonMain/kotlin") }
+            ?: java.io.File(project.basePath ?: "", "src/commonMain/kotlin")
+
+        val packageRelativePath = if (basePkg.isNotEmpty()) {
+            basePkg.replace(".", "/") + "/icons"
+        } else {
+            "icons"
+        }
+        val iconsDir = java.io.File(kotlinSrcDir, packageRelativePath)
+        return Pair(iconsPkg, iconsDir)
     }
 }
