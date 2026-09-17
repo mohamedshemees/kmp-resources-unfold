@@ -3,6 +3,8 @@
 # Kmp Resources Unfold Changelog
 
 ## [Unreleased]
+
+## [3.0.0]
 ### Added
 - **Fast Unused Resource & Drawable Detector**:
     - High-speed index search engine utilizing IntelliJ Platform's Trigram Word Index (`PsiSearchHelper`) for sub-millisecond usage lookups across code (`Res.drawable.xxx`, `@drawable/xxx`, `Icon(Xxx)`), layouts, and strings.
