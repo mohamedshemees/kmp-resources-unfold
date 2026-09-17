@@ -2,6 +2,8 @@ package com.github.mohamedshemees.kmpresourcesunfold.inspection
 
 import com.github.mohamedshemees.kmpresourcesunfold.ResourceConstants
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.project.IndexNotReadyException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
@@ -11,10 +13,12 @@ import com.intellij.psi.search.UsageSearchContext
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtProperty
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 object UnusedResourceDetector {
 
     private val cache = ConcurrentHashMap<String, Boolean>()
+    private val scanGeneration = AtomicInteger(0)
 
     fun clearCache() {
         cache.clear()
@@ -44,6 +48,7 @@ object UnusedResourceDetector {
         declaringFile: VirtualFile? = null
     ): Boolean {
         if (resourceName.isBlank()) return true
+        if (DumbService.isDumb(project)) return true
         
         val cleanName = resourceName.removePrefix("_")
         val cacheKey = "${project.basePath}_${declaringFile?.path ?: ""}_$cleanName"
@@ -126,21 +131,47 @@ object UnusedResourceDetector {
     ) {
         if (project.isDisposed) return
 
+        if (DumbService.isDumb(project)) {
+            DumbService.getInstance(project).runWhenSmart {
+                if (!project.isDisposed) {
+                    scanUnusedAsync(project, items, onComplete)
+                }
+            }
+            return
+        }
+
+        val gen = scanGeneration.incrementAndGet()
         ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
+            if (project.isDisposed || gen != scanGeneration.get()) return@executeOnPooledThread
 
             val unusedSet = mutableSetOf<String>()
             for ((name, file) in items) {
-                if (project.isDisposed) return@executeOnPooledThread
+                if (project.isDisposed || gen != scanGeneration.get()) return@executeOnPooledThread
+
+                if (DumbService.isDumb(project)) {
+                    DumbService.getInstance(project).runWhenSmart {
+                        if (!project.isDisposed && gen == scanGeneration.get()) {
+                            scanUnusedAsync(project, items, onComplete)
+                        }
+                    }
+                    return@executeOnPooledThread
+                }
 
                 val used = try {
                     ApplicationManager.getApplication().runReadAction<Boolean> {
-                        if (project.isDisposed || com.intellij.openapi.project.DumbService.isDumb(project)) {
-                            true // Don't block during indexing
+                        if (project.isDisposed || DumbService.isDumb(project)) {
+                            true
                         } else {
                             isResourceUsed(project, name, file)
                         }
                     }
+                } catch (_: IndexNotReadyException) {
+                    DumbService.getInstance(project).runWhenSmart {
+                        if (!project.isDisposed && gen == scanGeneration.get()) {
+                            scanUnusedAsync(project, items, onComplete)
+                        }
+                    }
+                    return@executeOnPooledThread
                 } catch (_: Throwable) {
                     true
                 }
@@ -151,9 +182,9 @@ object UnusedResourceDetector {
                 }
             }
 
-            if (!project.isDisposed) {
+            if (!project.isDisposed && gen == scanGeneration.get()) {
                 javax.swing.SwingUtilities.invokeLater {
-                    if (!project.isDisposed) {
+                    if (!project.isDisposed && gen == scanGeneration.get()) {
                         onComplete(unusedSet)
                     }
                 }

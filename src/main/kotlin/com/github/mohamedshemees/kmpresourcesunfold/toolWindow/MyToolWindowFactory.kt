@@ -12,6 +12,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.Messages
@@ -400,16 +401,31 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
         mainPanel.toolbar = topHeaderPanel
 
-        project.messageBus.connect(toolWindow.disposable)
-            .subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+        project.messageBus.connect(toolWindow.disposable).apply {
+            subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
                     UIUtil.invokeLaterIfNeeded {
-                        refreshData()
-                        updateModuleBox()
-                        updateList()
+                        if (!project.isDisposed) {
+                            refreshData()
+                            updateModuleBox()
+                            updateList()
+                        }
                     }
                 }
             })
+            subscribe(DumbService.DUMB_MODE, object : DumbService.DumbModeListener {
+                override fun exitDumbMode() {
+                    UIUtil.invokeLaterIfNeeded {
+                        if (!project.isDisposed) {
+                            refreshData()
+                            updateModuleBox()
+                            updateList()
+                            com.intellij.ide.projectView.ProjectView.getInstance(project).refresh()
+                        }
+                    }
+                }
+            })
+        }
 
         val editor = moduleBox.editor.editorComponent as JTextField
         var isFiltering = false
