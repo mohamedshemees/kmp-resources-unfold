@@ -14,9 +14,16 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.ui.components.JBList
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.psi.KtTypeReference
+import org.jetbrains.kotlin.psi.KtValueArgument
+import com.intellij.psi.util.PsiTreeUtil
 import java.awt.Component
 import java.awt.event.MouseEvent
 import javax.swing.DefaultListCellRenderer
@@ -28,7 +35,8 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
 
     private fun findKotlinVector(
         element: PsiElement,
-        iconName: String
+        iconName: String,
+        exactMatchOnly: Boolean = false
     ): Pair<VirtualFile?, com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>? {
         val cleanName = iconName.removePrefix("_")
         // 1. Check current containing file first (in-memory, live editor changes)
@@ -37,13 +45,18 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
             val currentText = containingFile?.text
             if (currentText != null && com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.isKotlinImageVectorFile(currentText)) {
                 val icons = com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorParser.parseKotlinImageVectors(currentText)
-                val match = icons.find { 
-                    it.name == iconName || 
-                    it.name.equals(iconName, ignoreCase = true) ||
-                    it.propertyName == iconName ||
-                    it.propertyName.equals(iconName, ignoreCase = true) ||
-                    it.name.equals(cleanName, ignoreCase = true) ||
-                    it.propertyName.equals(cleanName, ignoreCase = true)
+                val match = icons.find { icon ->
+                    if (exactMatchOnly) {
+                        icon.propertyName == iconName || icon.name == iconName ||
+                        icon.propertyName == cleanName || icon.name == cleanName
+                    } else {
+                        icon.name == iconName || 
+                        icon.name.equals(iconName, ignoreCase = true) ||
+                        icon.propertyName == iconName ||
+                        icon.propertyName.equals(iconName, ignoreCase = true) ||
+                        icon.name.equals(cleanName, ignoreCase = true) ||
+                        icon.propertyName.equals(cleanName, ignoreCase = true)
+                    }
                 }
                 if (match != null) {
                     return Pair(containingFile.virtualFile, match)
@@ -52,12 +65,13 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
         } catch (_: Throwable) {}
 
         // 2. Check project-wide files
-        return findKotlinVectorInProject(element.project, iconName)
+        return findKotlinVectorInProject(element.project, iconName, exactMatchOnly)
     }
 
     private fun findKotlinVectorInProject(
         project: com.intellij.openapi.project.Project, 
-        iconName: String
+        iconName: String,
+        exactMatchOnly: Boolean = false
     ): Pair<VirtualFile, com.github.mohamedshemees.kmpresourcesunfold.KotlinImageVectorIcon>? {
         val cleanName = iconName.removePrefix("_")
         val allFiles = KmpResourceScanner.findComposeDrawables(project)
@@ -75,13 +89,18 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                         parsed
                     } catch (_: Throwable) { emptyList() }
                 }
-                val match = icons.find { 
-                    it.name == iconName || 
-                    it.name.equals(iconName, ignoreCase = true) ||
-                    it.propertyName == iconName ||
-                    it.propertyName.equals(iconName, ignoreCase = true) ||
-                    it.name.equals(cleanName, ignoreCase = true) ||
-                    it.propertyName.equals(cleanName, ignoreCase = true)
+                val match = icons.find { icon ->
+                    if (exactMatchOnly) {
+                        icon.propertyName == iconName || icon.name == iconName ||
+                        icon.propertyName == cleanName || icon.name == cleanName
+                    } else {
+                        icon.name == iconName || 
+                        icon.name.equals(iconName, ignoreCase = true) ||
+                        icon.propertyName == iconName ||
+                        icon.propertyName.equals(iconName, ignoreCase = true) ||
+                        icon.name.equals(cleanName, ignoreCase = true) ||
+                        icon.propertyName.equals(cleanName, ignoreCase = true)
+                    }
                 }
                 if (match != null) return Pair(file, match)
             }
@@ -102,6 +121,50 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
         }
         return fallbackFile?.let { ResourceIconProvider.getIcon(it, size) }
             ?: ResourceIconProvider.CheckerboardIcon(javax.swing.UIManager.getIcon("FileView.fileIcon"), size, size)
+    }
+
+    private fun isReceiverOrCalleeOfNonVector(nameRef: KtNameReferenceExpression): Boolean {
+        // 1. If nameRef is the callee being invoked in a function/constructor call: e.g. background(...), padding(...)
+        val callParent = nameRef.parent as? KtCallExpression
+        if (callParent != null && callParent.calleeExpression == nameRef) {
+            return true
+        }
+
+        // 2. If nameRef is the callee of a qualified call e.g. Modifier.background(...) or Modifier.background
+        val dotParent = when {
+            callParent != null && callParent.parent is KtDotQualifiedExpression -> {
+                val dp = callParent.parent as KtDotQualifiedExpression
+                if (dp.selectorExpression == callParent) dp else null
+            }
+            nameRef.parent is KtDotQualifiedExpression -> {
+                val dp = nameRef.parent as KtDotQualifiedExpression
+                if (dp.selectorExpression == nameRef) dp else null
+            }
+            else -> null
+        }
+
+        if (dotParent != null) {
+            var curr: org.jetbrains.kotlin.psi.KtExpression? = dotParent
+            while (curr is KtDotQualifiedExpression) {
+                val receiverText = curr.receiverExpression.text
+                if (receiverText == "Modifier" || 
+                    receiverText.startsWith("Modifier.") || 
+                    receiverText.startsWith("modifier.") || 
+                    receiverText == "modifier" ||
+                    receiverText.contains("colorScheme") ||
+                    receiverText.contains("ColorScheme") ||
+                    receiverText.contains("colors") ||
+                    receiverText.contains("MaterialTheme") ||
+                    receiverText.contains("theme") ||
+                    receiverText.contains("Theme")
+                ) {
+                    return true
+                }
+                curr = curr.receiverExpression
+            }
+        }
+
+        return false
     }
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
@@ -191,7 +254,7 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
                                         parent.text.contains("ImageVector.Builder") || 
                                         parent.text.contains("Builder(")
                 if (isImageVectorProp) {
-                    val found = findKotlinVector(element, text)
+                    val found = findKotlinVector(element, text, exactMatchOnly = false)
                     if (found != null && (found.second.name.equals(text, ignoreCase = true) || found.second.propertyName.equals(text, ignoreCase = true))) {
                         val icon = createVectorIcon(found.second.xmlContent, found.first, 18)
                         return createMarker(element, icon, "Kotlin ImageVector: $text") { _, _ -> }
@@ -202,7 +265,17 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
 
         // 5. Handle Vector callers / references e.g. Icon(StickyNote), Image(StickyNote), rememberVectorPainter(StickyNote)
         if (nameRef != null && !text.startsWith("_") && text != "ImageVector" && text != "Builder") {
-            val enclosingProp = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtProperty::class.java)
+            // Must not be a package or import or type reference
+            if (PsiTreeUtil.getParentOfType(element, KtImportDirective::class.java) != null) return null
+            if (PsiTreeUtil.getParentOfType(element, KtPackageDirective::class.java) != null) return null
+            if (PsiTreeUtil.getParentOfType(element, KtTypeReference::class.java) != null) return null
+
+            // Exclude function calls (e.g. background(...)), modifier chains, theme/colors expressions
+            if (isReceiverOrCalleeOfNonVector(nameRef)) {
+                return null
+            }
+
+            val enclosingProp = PsiTreeUtil.getParentOfType(element, KtProperty::class.java)
             val isInsideOwnVectorDeclaration = enclosingProp != null && (
                 enclosingProp.name == text ||
                 enclosingProp.name == "_$text" ||
@@ -210,13 +283,15 @@ class ResourcePreviewLineMarkerProvider : LineMarkerProvider {
             )
 
             if (!isInsideOwnVectorDeclaration) {
-                val valueArg = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtValueArgument::class.java)
-                val dotQualified = com.intellij.psi.util.PsiTreeUtil.getParentOfType(element, org.jetbrains.kotlin.psi.KtDotQualifiedExpression::class.java)
-                val isAppropriateUsage = valueArg != null || (dotQualified != null && dotQualified.selectorExpression == nameRef) || (enclosingProp != null && enclosingProp.name != text)
+                val valueArg = PsiTreeUtil.getParentOfType(element, KtValueArgument::class.java)
+                val dotQualified = PsiTreeUtil.getParentOfType(element, KtDotQualifiedExpression::class.java)
+                val isAppropriateUsage = valueArg != null || 
+                    (dotQualified != null && dotQualified.selectorExpression == nameRef) || 
+                    (enclosingProp != null && enclosingProp.name != text)
 
                 if (isAppropriateUsage) {
-                    val found = findKotlinVector(element, text)
-                    if (found != null && (found.second.name.equals(text, ignoreCase = true) || found.second.propertyName.equals(text, ignoreCase = true))) {
+                    val found = findKotlinVector(element, text, exactMatchOnly = true)
+                    if (found != null && (found.second.propertyName == text || found.second.name == text || found.second.propertyName == text.removePrefix("_"))) {
                         val icon = createVectorIcon(found.second.xmlContent, found.first, 18)
                         return createMarker(element, icon, "Click to swap vector: $text") { e, elt ->
                             val targetRef = when (elt) {
