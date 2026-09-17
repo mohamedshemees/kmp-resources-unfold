@@ -29,7 +29,8 @@ enum class ResourceType(val bundleKey: String) {
     VECTORS("filter.vectors"),
     IMAGES("filter.images"),
     STRINGS("filter.strings"),
-    FONTS("filter.fonts");
+    FONTS("filter.fonts"),
+    UNUSED("filter.unused");
 
     companion object {
         fun fromFilterName(name: String): ResourceType =

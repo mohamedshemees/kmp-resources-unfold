@@ -41,8 +41,21 @@
                          enabledByDefault="true"
                          level="WARNING"
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.KotlinMissingTranslationInspection"/>
+        <localInspection language="kotlin"
+                         displayName="Unused Compose ImageVector"
+                         groupName="KMP resources"
+                         enabledByDefault="true"
+                         level="WEAK WARNING"
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.UnusedDrawableInspection"/>
+        <localInspection language="XML"
+                         displayName="Unused drawable resource"
+                         groupName="KMP resources"
+                         enabledByDefault="true"
+                         level="WEAK WARNING"
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.UnusedDrawableInspection"/>
 
         <iconProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.ResourceFileIconProvider" order="first"/>
+        <projectViewNodeDecorator implementation="com.github.mohamedshemees.kmpresourcesunfold.projectView.ResourceProjectViewNodeDecorator"/>
 
         <codeInsight.lineMarkerProvider language="kotlin"
                                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.navigation.ResourcePreviewLineMarkerProvider"/>

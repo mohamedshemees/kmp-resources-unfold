@@ -3,6 +3,22 @@
 # Kmp Resources Unfold Changelog
 
 ## [Unreleased]
+### Added
+- **Fast Unused Resource & Drawable Detector**:
+    - High-speed index search engine utilizing IntelliJ Platform's Trigram Word Index (`PsiSearchHelper`) for sub-millisecond usage lookups across code (`Res.drawable.xxx`, `@drawable/xxx`, `Icon(Xxx)`), layouts, and strings.
+    - Added dedicated **"Unused"** filter chip in the tool window showing real-time counts of unreferenced assets.
+    - Unused drawables and vectors display an amber **"Unused"** pill badge in the tool window list.
+- **Batch Delete Unused Drawables Action**:
+    - Added a toolbar action with a trash bin icon to batch-delete all unused drawables with instant in-memory UI updates, non-blocking background file deletion, and automatic disk space calculation.
+- **In-Editor Unused Asset Inspections**:
+    - Highlights unreferenced Compose `ImageVector` properties and XML drawables directly in the editor with quick-fixes to safely delete unused resources.
+- **Project View Tree "Unused" Badges**:
+    - Displays a styled amber **`Unused`** label beside unused resource files (drawables, vectors, fonts) directly in the IDE's Project View tree.
+
+### Fixed
+- **Modifier & Function Call Gutter Icon Collisions**:
+    - Fixed an issue where Compose modifier calls like `Modifier.background(...)`, `Modifier.padding(...)`, or theme colors like `MaterialTheme.colorScheme.background` falsely showed drawable gutter preview icons if an asset sharing the same name existed in the project.
+    - Added strict validation to ensure function calls, modifier receiver chains, and case-mismatched identifiers are never mistaken for `ImageVector` references.
 
 ## [2.5.0]
 ### Added

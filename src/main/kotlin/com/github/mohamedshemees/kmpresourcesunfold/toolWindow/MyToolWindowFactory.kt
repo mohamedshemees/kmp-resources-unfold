@@ -46,7 +46,8 @@ data class ResourceParent(
     val name: String, 
     val icon: Icon?, 
     val representativeFile: VirtualFile?,
-    val subtitle: String = ""
+    val subtitle: String = "",
+    val isUnused: Boolean = false
 )
 data class ResourceChild(val file: VirtualFile, val density: String, val moduleName: String)
 data class ResourceFileItem(val file: VirtualFile, val moduleName: String)
@@ -61,6 +62,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
     private var allStringResources = listOf<StringResource>()
     private var currentTypeFilter = ResourceType.ALL
     private var clickTimer: Timer? = null
+    private val unusedSet = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     private fun getDensity(file: VirtualFile): String {
         val parent = file.parent ?: return "Default"
@@ -74,8 +76,8 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val mainPanel = SimpleToolWindowPanel(true, true)
-        lateinit var updateList: () -> Unit
-        lateinit var updateModuleBox: () -> Unit
+        var updateList: () -> Unit = {}
+        var updateModuleBox: () -> Unit = {}
 
         val fileToModuleMap = mutableMapOf<VirtualFile, String>()
         var availableModules = listOf<String>()
@@ -92,6 +94,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
         val refreshData = {
             ResourceIconProvider.clearCache()
+            com.github.mohamedshemees.kmpresourcesunfold.inspection.UnusedResourceDetector.clearCache()
             allFiles = KmpResourceScanner.findComposeDrawables(project)
             fileToModuleMap.clear()
             
@@ -120,6 +123,20 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             allStringResources = StringResourceProcessor.findStringResources(project, allFiles, fileToModuleMap)
             availableModules = fileToModuleMap.values.distinct().sorted()
+
+            // Trigger background scan for unused resources
+            val itemsToScan = mutableListOf<Pair<String, VirtualFile?>>()
+            allFiles.filter { it.extension?.lowercase() != "kt" && !it.path.contains("values") }.forEach { file ->
+                itemsToScan.add(Pair(file.nameWithoutExtension, file))
+            }
+            allKotlinVectorItems.forEach { item ->
+                itemsToScan.add(Pair(item.iconName, item.file))
+            }
+            com.github.mohamedshemees.kmpresourcesunfold.inspection.UnusedResourceDetector.scanUnusedAsync(project, itemsToScan) { unusedResult ->
+                unusedSet.clear()
+                unusedSet.addAll(unusedResult)
+                updateList()
+            }
         }
 
         refreshData()
@@ -191,6 +208,91 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         }
         actionGroup.add(refreshAction)
 
+        val deleteUnusedAction = object : AnAction(
+            "Delete Unused Drawables",
+            "Delete all unused drawables and vector assets across the project",
+            com.intellij.icons.AllIcons.Actions.GC
+        ) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val unusedFiles = mutableListOf<Pair<String, VirtualFile>>()
+                val nonKt = allFiles.filter { it.extension?.lowercase() != "kt" && !it.path.contains("values") }
+                nonKt.forEach { file ->
+                    if (unusedSet.contains(file.nameWithoutExtension) || unusedSet.contains(file.path)) {
+                        unusedFiles.add(Pair(file.name, file))
+                    }
+                }
+                allKotlinVectorItems.forEach { item ->
+                    if (unusedSet.contains(item.iconName) || unusedSet.contains(item.file.path)) {
+                        if (unusedFiles.none { it.second == item.file }) {
+                            unusedFiles.add(Pair(item.iconName, item.file))
+                        }
+                    }
+                }
+
+                if (unusedFiles.isEmpty()) {
+                    Messages.showInfoMessage(project, "No unused drawables found in the project.", "Delete Unused Drawables")
+                } else {
+                    val totalBytes = unusedFiles.sumOf { it.second.length }
+                    val formattedSize = ResourceUtils.formatSize(totalBytes)
+
+                    val message = "Found ${unusedFiles.size} unused drawables ($formattedSize):\n\n" +
+                            unusedFiles.take(8).joinToString("\n") { " • ${it.first} (${it.second.name})" } +
+                            (if (unusedFiles.size > 8) "\n ... and ${unusedFiles.size - 8} more" else "") +
+                            "\n\nAre you sure you want to delete these unused files?"
+
+                    val confirm = Messages.showYesNoDialog(
+                        project,
+                        message,
+                        "Delete Unused Drawables (${unusedFiles.size} files)",
+                        "Delete All",
+                        "Cancel",
+                        Messages.getWarningIcon()
+                    )
+
+                    if (confirm == Messages.YES) {
+                        val filesToDelete = unusedFiles.map { it.second }.toSet()
+                        val count = unusedFiles.size
+
+                        // 1. Immediately update UI state in memory for instant feedback (0ms lag)
+                        allFiles = allFiles.filterNot { filesToDelete.contains(it) }
+                        allKotlinVectorItems = allKotlinVectorItems.filterNot { filesToDelete.contains(it.file) }
+                        unusedFiles.forEach { (name, file) ->
+                            unusedSet.remove(name)
+                            unusedSet.remove(file.path)
+                            unusedSet.remove(file.nameWithoutExtension)
+                        }
+                        updateList()
+
+                        // 2. Show lightweight toast notification
+                        val targetComp = (e.inputEvent?.component as? JComponent) ?: mainPanel
+                        JBPopupFactory.getInstance().createHtmlTextBalloonBuilder(
+                            "Deleted $count unused files ($formattedSize saved)",
+                            com.intellij.openapi.ui.MessageType.INFO,
+                            null
+                        ).setFadeoutTime(3000).createBalloon().show(RelativePoint.getCenterOf(targetComp), Balloon.Position.above)
+
+                        // 3. Perform file system deletion in background without holding UI locks
+                        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                            val parents = mutableSetOf<VirtualFile>()
+                            filesToDelete.forEach { vFile ->
+                                try {
+                                    vFile.parent?.let { parents.add(it) }
+                                    val ioFile = java.io.File(vFile.path)
+                                    if (ioFile.exists()) {
+                                        ioFile.delete()
+                                    }
+                                } catch (_: Throwable) {}
+                            }
+                            if (parents.isNotEmpty()) {
+                                com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(true, true, true, *parents.toTypedArray())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        actionGroup.add(deleteUnusedAction)
+
         val toolbar = ActionManager.getInstance().createActionToolbar("KmpResourcesUnfoldToolbar", actionGroup, true)
         toolbar.targetComponent = mainPanel
 
@@ -237,6 +339,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
         chips.add(FilterChip(MyBundle.message("filter.images"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.strings"), false, 0, onChipClicked))
         chips.add(FilterChip(MyBundle.message("filter.fonts"), false, 0, onChipClicked))
+        chips.add(FilterChip(MyBundle.message("filter.unused"), false, 0, onChipClicked))
         chips.forEach { chipPanel.add(it) }
         topHeaderPanel.add(chipPanel)
         topHeaderPanel.add(Box.createVerticalStrut(6))
@@ -516,17 +619,19 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     ResourceType.IMAGES -> ResourceExtension.imageExtensions.contains(ext)
                     ResourceType.FONTS -> ResourceExtension.fontExtensions.contains(ext)
                     ResourceType.STRINGS -> false
+                    ResourceType.UNUSED -> unusedSet.contains(file.nameWithoutExtension) || unusedSet.contains(file.path)
                     else -> ext != ResourceExtension.XML || !file.path.contains("values")
                 }
                 val matchesSearch = file.name.lowercase().contains(lowerSearch)
                 matchesModule && matchesSearch && matchesType
             }
 
-            val filteredKotlinVectors = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.VECTORS) {
+            val filteredKotlinVectors = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.VECTORS || currentTypeFilter == ResourceType.UNUSED) {
                 allKotlinVectorItems.filter { item ->
                     val matchesModule = selectedModule == allModulesStr || item.moduleName == selectedModule
                     val matchesSearch = item.iconName.lowercase().contains(lowerSearch) || item.file.name.lowercase().contains(lowerSearch)
-                    matchesModule && matchesSearch
+                    val matchesUnused = currentTypeFilter != ResourceType.UNUSED || unusedSet.contains(item.iconName) || unusedSet.contains(item.file.path)
+                    matchesModule && matchesSearch && matchesUnused
                 }
             } else emptyList()
 
@@ -550,8 +655,9 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
 
             if (filteredKotlinVectors.isNotEmpty()) {
                 filteredKotlinVectors.sortedBy { it.iconName }.forEach { item ->
+                    val isUnused = unusedSet.contains(item.iconName) || unusedSet.contains(item.file.path)
                     val sub = "${item.moduleName} • Compose Vector"
-                    resourceModel.addElement(ResourceParent(item.iconName, item.icon, item.file, sub))
+                    resourceModel.addElement(ResourceParent(item.iconName, item.icon, item.file, sub, isUnused))
                 }
             }
 
@@ -565,6 +671,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     
                     val representative = sortedFiles.find { getDensity(it) == "Default" } ?: sortedFiles.first()
                     val moduleName = fileToModuleMap[representative] ?: "Unknown"
+                    val isUnused = unusedSet.contains(name) || sortedFiles.any { unusedSet.contains(it.path) }
 
                     if (sortedFiles.size == 1) {
                         val file = sortedFiles.first()
@@ -572,10 +679,10 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                         val density = getDensity(file)
                         val tag = if (density == "Default") ext else "$density • $ext"
                         val sub = "$moduleName • $tag"
-                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(file), file, sub))
+                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(file), file, sub, isUnused))
                     } else {
                         val sub = "$moduleName • ${sortedFiles.size} variants"
-                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative, sub))
+                        resourceModel.addElement(ResourceParent(name, ResourceIconProvider.getIcon(representative), representative, sub, isUnused))
                         sortedFiles.forEach { file ->
                             val mod = fileToModuleMap[file] ?: "Unknown"
                             resourceModel.addElement(ResourceChild(file, getDensity(file), mod))
@@ -595,7 +702,17 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             }
 
             val totalResourcesCount = filteredFiles.size + filteredStrings.size + filteredStringsFiles.size + filteredKotlinVectors.size
-            chips.forEach { it.updateCount(totalResourcesCount) }
+            chips.forEach { chip ->
+                val count = when (ResourceType.fromFilterName(chip.filterName)) {
+                    ResourceType.ALL -> allFiles.size + allStringResources.size + allKotlinVectorItems.size
+                    ResourceType.VECTORS -> allFiles.count { ResourceExtension.vectorExtensions.contains(ResourceExtension.fromExtension(it.extension)) } + allKotlinVectorItems.size
+                    ResourceType.IMAGES -> allFiles.count { ResourceExtension.imageExtensions.contains(ResourceExtension.fromExtension(it.extension)) }
+                    ResourceType.STRINGS -> allStringResources.size
+                    ResourceType.FONTS -> allFiles.count { ResourceExtension.fontExtensions.contains(ResourceExtension.fromExtension(it.extension)) }
+                    ResourceType.UNUSED -> allFiles.count { it.extension?.lowercase() != "kt" && !it.path.contains("values") && (unusedSet.contains(it.nameWithoutExtension) || unusedSet.contains(it.path)) } + allKotlinVectorItems.count { unusedSet.contains(it.iconName) || unusedSet.contains(it.file.path) }
+                }
+                chip.updateCount(count)
+            }
         }
 
 

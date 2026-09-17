@@ -47,6 +47,21 @@ class ResourceListCellRenderer(private val project: Project) : ListCellRenderer<
                         subLabel.alignmentY = Component.CENTER_ALIGNMENT
                         add(subLabel)
                     }
+                    if (value.isUnused) {
+                        add(Box.createHorizontalStrut(8))
+                        val unusedBadge = JLabel("Unused").apply {
+                            foreground = JBColor(java.awt.Color(0xD97706), java.awt.Color(0xFBBF24))
+                            background = JBColor(java.awt.Color(0xFEF3C7), java.awt.Color(0x78350F))
+                            isOpaque = true
+                            font = com.intellij.util.ui.JBUI.Fonts.smallFont().deriveFont(9f)
+                            border = BorderFactory.createCompoundBorder(
+                                BorderFactory.createLineBorder(JBColor(java.awt.Color(0xFDE68A), java.awt.Color(0x92400E)), 1, true),
+                                BorderFactory.createEmptyBorder(1, 5, 1, 5)
+                            )
+                            alignmentY = Component.CENTER_ALIGNMENT
+                        }
+                        add(unusedBadge)
+                    }
                 }
 
                 panel.background = list.background
