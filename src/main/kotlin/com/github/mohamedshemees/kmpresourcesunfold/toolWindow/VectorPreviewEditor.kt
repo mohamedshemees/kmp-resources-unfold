@@ -145,6 +145,7 @@ class VectorPreviewEditor(private val file: VirtualFile) : UserDataHolderBase(),
     override fun setState(state: FileEditorState) {}
     override fun isModified(): Boolean = false
     override fun isValid(): Boolean = file.isValid
+    override fun getFile(): VirtualFile = file
     override fun addPropertyChangeListener(l: PropertyChangeListener) {}
     override fun removePropertyChangeListener(l: PropertyChangeListener) {}
     override fun getCurrentLocation(): FileEditorLocation? = null
