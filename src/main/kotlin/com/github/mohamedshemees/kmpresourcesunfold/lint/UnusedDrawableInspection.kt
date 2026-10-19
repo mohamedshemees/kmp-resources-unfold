@@ -6,43 +6,20 @@ import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiFile
 import com.intellij.psi.xml.XmlFile
-import com.intellij.psi.xml.XmlTag
-import org.jetbrains.kotlin.psi.KtProperty
-import org.jetbrains.kotlin.psi.KtVisitorVoid
 
 class UnusedDrawableInspection : LocalInspectionTool() {
+
+    override fun getStaticDescription(): String {
+        return "Detects XML drawable resources (vectors, shapes, etc.) that appear to be unused in the project."
+    }
 
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         val file = holder.file.virtualFile ?: return PsiElementVisitor.EMPTY_VISITOR
         if (UnusedResourceDetector.isBuildOrIgnoredFile(file)) {
             return PsiElementVisitor.EMPTY_VISITOR
-        }
-
-        // For Kotlin ImageVector properties
-        if (file.extension?.lowercase() == "kt") {
-            return object : KtVisitorVoid() {
-                override fun visitProperty(property: KtProperty) {
-                    super.visitProperty(property)
-                    val propName = property.name ?: return
-                    if (propName.startsWith("_")) return // Backing property
-                    val typeText = property.typeReference?.text ?: ""
-                    if (!typeText.contains("ImageVector")) return
-
-                    val nameIdentifier = property.nameIdentifier ?: return
-                    val isUsed = UnusedResourceDetector.isResourceUsed(property.project, propName, file)
-                    if (!isUsed) {
-                        holder.registerProblem(
-                            nameIdentifier,
-                            "Compose ImageVector '$propName' appears to be unused in this project",
-                            DeleteUnusedQuickFix(propName, property.containingFile)
-                        )
-                    }
-                }
-            }
         }
 
         // For XML Vector Drawables

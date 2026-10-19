@@ -42,12 +42,14 @@
                          level="WARNING"
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.KotlinMissingTranslationInspection"/>
         <localInspection language="kotlin"
+                         shortName="KotlinUnusedImageVector"
                          displayName="Unused Compose ImageVector"
                          groupName="KMP resources"
                          enabledByDefault="true"
                          level="WEAK WARNING"
-                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.UnusedDrawableInspection"/>
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.KotlinUnusedImageVectorInspection"/>
         <localInspection language="XML"
+                         shortName="UnusedDrawable"
                          displayName="Unused drawable resource"
                          groupName="KMP resources"
                          enabledByDefault="true"
