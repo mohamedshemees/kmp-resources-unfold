@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [3.1.0]
+### Fixed
+- **Inspection Short Name Conflict**:
+    - Resolved `PluginException: Short name 'UnusedDrawable' is not unique` on project open by separating the inspection into two dedicated tools: `UnusedDrawableInspection` (for XML drawables, `shortName="UnusedDrawable"`) and `KotlinUnusedImageVectorInspection` (for Kotlin Compose ImageVectors, `shortName="KotlinUnusedImageVector"`).
+- **Project View Tree Unused Badges**:
+    - Prevented non-file tree elements (classes, members, or methods inside Kotlin files) from erroneously displaying the "Unused" badge by validating `PsiFileSystemItem`.
+    - Added strict validation (`isResourceFile`) to ensure only actual resource assets (XML drawables, icons in `icons/` packages, images, and fonts in resource directories) receive unused status badges in the Project View tree.
+
 ## [3.0.0]
 ### Added
 - **Fast Unused Resource & Drawable Detector**:
