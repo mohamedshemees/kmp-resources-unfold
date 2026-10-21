@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ## [3.1.0]
+### Added
+- **Unused String Resources Detection & Inspection**:
+    - Extended the Trigram search index engine to detect unreferenced string resource keys in `strings.xml`.
+    - Accurately distinguishes resource definitions across localized translations (`values-ar/`, `values-es/`, etc.) from actual usages in code (`Res.string.key`, `@string/key`).
+    - Added dedicated **`UnusedStringInspection`** (`shortName="UnusedString"`) with a one-click quick-fix: *"Safe delete across all locales"* (removes the key from base and all translated locale files simultaneously).
+    - Integrated with the **"Unused"** filter chip in the tool window, including live counter badges and amber **`Unused`** pills on string items.
+
 ### Fixed
 - **Inspection Short Name Conflict**:
     - Resolved `PluginException: Short name 'UnusedDrawable' is not unique` on project open by separating the inspection into two dedicated tools: `UnusedDrawableInspection` (for XML drawables, `shortName="UnusedDrawable"`) and `KotlinUnusedImageVectorInspection` (for Kotlin Compose ImageVectors, `shortName="KotlinUnusedImageVector"`).

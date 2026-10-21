@@ -11,6 +11,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiSearchHelper
 import com.intellij.psi.search.UsageSearchContext
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.xml.XmlTag
 import org.jetbrains.kotlin.psi.KtProperty
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -83,6 +84,17 @@ object UnusedResourceDetector {
                     }
                 }
 
+                // Check for string definitions across ANY values*/strings.xml file
+                if (containingFile.extension?.lowercase() == "xml" && containingFile.parent?.name?.startsWith("values") == true) {
+                    val xmlTag = PsiTreeUtil.getParentOfType(psiElement, XmlTag::class.java)
+                    if (xmlTag != null && xmlTag.name == "string") {
+                        val nameAttr = xmlTag.getAttribute("name")
+                        if (nameAttr?.value == cleanName) {
+                            return@processElementsWithWord true // Skip definition in this or sibling localized file
+                        }
+                    }
+                }
+
                 // Legitimate usage found in code, strings, or layouts!
                 isUsed = true
                 false // Stop search immediately
@@ -105,6 +117,15 @@ object UnusedResourceDetector {
                         }
                         if (declaringFile != null && containingFile.path == declaringFile.path) {
                             return@processElementsWithWord true
+                        }
+                        if (containingFile.extension?.lowercase() == "xml" && containingFile.parent?.name?.startsWith("values") == true) {
+                            val xmlTag = PsiTreeUtil.getParentOfType(psiElement, XmlTag::class.java)
+                            if (xmlTag != null && xmlTag.name == "string") {
+                                val nameAttr = xmlTag.getAttribute("name")
+                                if (nameAttr?.value == cleanName || nameAttr?.value == camelCase) {
+                                    return@processElementsWithWord true
+                                }
+                            }
                         }
                         isUsed = true
                         false

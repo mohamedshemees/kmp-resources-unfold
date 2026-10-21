@@ -11,7 +11,8 @@ data class StringResource(
     val defaultValue: String,
     val missingLocales: List<String>,
     val file: VirtualFile,
-    val moduleName: String = "Unknown"
+    val moduleName: String = "Unknown",
+    val isUnused: Boolean = false
 )
 
 object StringResourceProcessor {

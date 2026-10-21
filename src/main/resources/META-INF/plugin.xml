@@ -55,6 +55,13 @@
                          enabledByDefault="true"
                          level="WEAK WARNING"
                          implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.UnusedDrawableInspection"/>
+        <localInspection language="XML"
+                         shortName="UnusedString"
+                         displayName="Unused string resource"
+                         groupName="KMP resources"
+                         enabledByDefault="true"
+                         level="WEAK WARNING"
+                         implementationClass="com.github.mohamedshemees.kmpresourcesunfold.lint.UnusedStringInspection"/>
 
         <iconProvider implementation="com.github.mohamedshemees.kmpresourcesunfold.ResourceFileIconProvider" order="first"/>
         <projectViewNodeDecorator implementation="com.github.mohamedshemees.kmpresourcesunfold.projectView.ResourceProjectViewNodeDecorator"/>

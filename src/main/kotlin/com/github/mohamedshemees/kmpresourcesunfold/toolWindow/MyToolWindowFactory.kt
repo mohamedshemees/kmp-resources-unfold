@@ -133,6 +133,9 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             allKotlinVectorItems.forEach { item ->
                 itemsToScan.add(Pair(item.iconName, item.file))
             }
+            allStringResources.forEach { str ->
+                itemsToScan.add(Pair(str.key, str.file))
+            }
             com.github.mohamedshemees.kmpresourcesunfold.inspection.UnusedResourceDetector.scanUnusedAsync(project, itemsToScan) { unusedResult ->
                 unusedSet.clear()
                 unusedSet.addAll(unusedResult)
@@ -651,12 +654,13 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             } else emptyList()
 
-            val filteredStrings = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS) {
+            val filteredStrings = if (currentTypeFilter == ResourceType.ALL || currentTypeFilter == ResourceType.STRINGS || currentTypeFilter == ResourceType.UNUSED) {
                 allStringResources.filter { resource ->
                     val moduleName = resource.moduleName
                     val matchesModule = selectedModule == allModulesStr || moduleName == selectedModule
                     val matchesSearch = resource.key.lowercase().contains(lowerSearch)
-                    matchesModule && matchesSearch
+                    val matchesUnused = currentTypeFilter != ResourceType.UNUSED || unusedSet.contains(resource.key)
+                    matchesModule && matchesSearch && matchesUnused
                 }
             } else emptyList()
 
@@ -710,7 +714,10 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
             if (filteredStrings.isNotEmpty() || filteredStringsFiles.isNotEmpty()) {
                 val stringsSub = if (filteredStrings.isNotEmpty()) "${filteredStrings.size} keys" else ""
                 resourceModel.addElement(ResourceParent("Strings", UIManager.getIcon("FileView.fileIcon"), filteredStringsFiles.firstOrNull(), stringsSub))
-                filteredStrings.sortedBy { it.key }.forEach { resourceModel.addElement(it) }
+                filteredStrings.sortedBy { it.key }.forEach { str ->
+                    val isUnused = unusedSet.contains(str.key)
+                    resourceModel.addElement(str.copy(isUnused = isUnused))
+                }
                 filteredStringsFiles.sortedBy { it.name }.forEach { file ->
                     val moduleName = fileToModuleMap[file] ?: "Unknown"
                     resourceModel.addElement(ResourceFileItem(file, moduleName))
@@ -725,7 +732,7 @@ class MyToolWindowFactory : ToolWindowFactory, DumbAware {
                     ResourceType.IMAGES -> allFiles.count { ResourceExtension.imageExtensions.contains(ResourceExtension.fromExtension(it.extension)) }
                     ResourceType.STRINGS -> allStringResources.size
                     ResourceType.FONTS -> allFiles.count { ResourceExtension.fontExtensions.contains(ResourceExtension.fromExtension(it.extension)) }
-                    ResourceType.UNUSED -> allFiles.count { it.extension?.lowercase() != "kt" && !it.path.contains("values") && (unusedSet.contains(it.nameWithoutExtension) || unusedSet.contains(it.path)) } + allKotlinVectorItems.count { unusedSet.contains(it.iconName) || unusedSet.contains(it.file.path) }
+                    ResourceType.UNUSED -> allFiles.count { it.extension?.lowercase() != "kt" && !it.path.contains("values") && (unusedSet.contains(it.nameWithoutExtension) || unusedSet.contains(it.path)) } + allKotlinVectorItems.count { unusedSet.contains(it.iconName) || unusedSet.contains(it.file.path) } + allStringResources.count { unusedSet.contains(it.key) }
                 }
                 chip.updateCount(count)
             }
